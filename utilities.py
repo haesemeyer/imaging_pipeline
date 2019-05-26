@@ -1,3 +1,12 @@
+#  Copyright 2019 Martin Haesemeyer. All rights reserved.
+#
+# Licensed under the MIT license
+
+"""
+Module with general utility functions
+"""
+
+
 try:
     import Tkinter
     import tkFileDialog

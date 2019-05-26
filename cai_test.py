@@ -1,4 +1,11 @@
-# script for motion correction and unit-exraction of 2P-stack using CaImAn
+#  Copyright 2019 Martin Haesemeyer. All rights reserved.
+#
+# Licensed under the MIT license
+
+"""
+Script for testing caiman - cai_demo.py implementation with slight adjustments
+"""
+
 
 import numpy as np
 from tifffile import imsave

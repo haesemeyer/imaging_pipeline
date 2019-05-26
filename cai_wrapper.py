@@ -1,3 +1,12 @@
+#  Copyright 2019 Martin Haesemeyer. All rights reserved.
+#
+# Licensed under the MIT license
+
+"""
+Class wrapper of caiman motion correction and unit extraction
+"""
+
+
 import numpy as np
 from tifffile import imsave, imread
 from os import path, makedirs, remove

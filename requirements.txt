@@ -1,0 +1,6 @@
+seaborn
+matplotlib
+tifffile
+numpy
+caiman
+tk

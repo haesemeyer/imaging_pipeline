@@ -10,7 +10,21 @@ Module to parse experimental file structure extracting relevant acquisition info
 from datetime import datetime
 
 
-class InfoFile:
+class LineParser:
+    def __init__(self, file_name: str, type_string: str):
+        if type_string not in file_name:
+            raise ValueError(f"The file {file_name} is not a {type_string} file")
+        info_file = open(file_name, 'rt')
+        self.all_contents = info_file.readlines()
+        info_file.close()
+        self.info = {"full_text": "\n".join(self.all_contents), "original_file": file_name}
+
+    @staticmethod
+    def _parse(line: str) -> (str, object):
+        raise NotImplementedError()
+
+
+class InfoFile(LineParser):
     """
     Parser for .info file (one such file per experiment)
     """
@@ -20,13 +34,8 @@ class InfoFile:
         as this should be handled by downstream analysis code
         :param file_name: The file path and name of a .info file
         """
-        if file_name.split('.')[-1] != 'info':
-            raise ValueError(f"The file {file_name} is not a .info file")
-        info_file = open(file_name, 'rt')
-        all_contents = info_file.readlines()
-        info_file.close()
-        self.info = {"full_text": "\n".join(all_contents), "original_file": file_name}
-        for ln in all_contents:
+        super().__init__(file_name, '.info')
+        for ln in self.all_contents:
             k, v = self._parse(ln)
             if k is not None:
                 self.info[k] = v
@@ -65,11 +74,57 @@ class InfoFile:
         return None, None
 
 
-class ImageScannerFixed:
+class ImageScannerFixed(LineParser):
     """
     Parser for plane-specific ImageScannerFixed.txt file
     """
-    pass
+
+    def __init__(self, file_name: str):
+        """
+        Parses information in ...ImageScannerFixed.txt files of each imaging plane
+        :param file_name: The file path and name of a .txt file
+        """
+        super().__init__(file_name, 'ImageScannerFixed.txt')
+        for ln in self.all_contents:
+            k, v = self._parse(ln)
+            if k is not None:
+                self.info[k] = v
+
+    @staticmethod
+    def _parse(line: str) -> (str, object):
+        """
+        Processes a line of text and if it contains experimental parameters
+        returns a corresponding key and value or None, None otherwise
+        :param line: A line of the info file
+        :return: If general experiment information was present on the line a corresponding key, value pair
+        """
+        if "Zoom" in line:
+            v = line.split("\t")[-1].strip()
+            return "fov", 500/float(v)
+        if "DwellTimeIn" in line:
+            v = line.split("\t")[-1].strip()
+            return "dwell_time_us", float(v)
+        if "Pixels" in line:
+            v = line.split("\t")[-1].strip()
+            return "pixels_per_line", int(v)
+        if "LinesPer" in line:
+            v = line.split("\t")[-1].strip()
+            return "lines_per_image", int(v)
+        if "Reps" in line:
+            v = line.split("\t")[-1].strip()
+            return "reps_per_line", int(v)
+        if "Power" in line:
+            v = line.split("\t")[-1].strip()
+            return "power_stage", float(v)
+        if "X" in line:
+            v = line.split("\t")[-1].strip()
+            return "x_stage", float(v)
+        if "Y" in line:
+            v = line.split("\t")[-1].strip()
+            return "y_stage", float(v)
+        if "Z" in line:
+            v = line.split("\t")[-1].strip()
+            return "z_stage", float(v)
 
 
 class ExperimentParser:

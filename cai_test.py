@@ -19,6 +19,7 @@ from caiman.motion_correction import MotionCorrect
 from caiman.source_extraction.cnmf import cnmf as cnmf
 from caiman.source_extraction.cnmf import params as params
 from cai_wrapper import CaImAn
+from experiment_parser import ExperimentParser
 
 logging.basicConfig(format=
                     "%(relativeCreated)12d [%(filename)s:%(funcName)20s():%(lineno)s]"\
@@ -178,8 +179,8 @@ def main(zoom_level, t_per_frame, filenames):
     return cnm, cnm2
 
 
-def main2(zoom_level, t_per_frame, filename):
-    cai = CaImAn(4.0, 500/zoom_level, t_per_frame)
+def main2(fov, t_per_frame, filename):
+    cai = CaImAn(4.0, fov, t_per_frame)
     im = cai.motion_correct(filename)[0]
     return cai.extract_components(im, filename)[1]
 
@@ -187,14 +188,16 @@ def main2(zoom_level, t_per_frame, filename):
 if __name__ == "__main__":
     __spec__ = "ModuleSpec(name='builtins', loader=<class '_frozen_importlib.BuiltinImporter'>)"
 
-    zoom = float(input("Please enter the acquisition zoom: "))
-    frame_duration = float(input("Please enter the time per frame in seconds: "))
-    fnames = ui_get_file(filetypes=[('Tiff stack', '*.tif')], multiple=True)
+    info_file = ui_get_file(filetypes=[('Experiment info', '*.info')], multiple=False)
+    if type(info_file) == list:
+        info_file = info_file[0]
+    eparser = ExperimentParser(info_file)
+    fnames = [path.join(eparser.original_path, ch0) for ch0 in eparser.ch_0_files]
+    frame_duration = eparser.info_data["frame_duration"]
     all_c = []
-    for fn in fnames:
-        fit_cnm2 = main2(zoom, frame_duration, fn)
+    for i, fn in enumerate(fnames):
+        fit_cnm2 = main2(eparser.scanner_data[i]["fov"], frame_duration, fn)
         all_c.append(fit_cnm2.estimates.C)
-    # all_c = np.vstack(all_c)
     all_c = [a for b in all_c for a in b]
     regressors = np.load("rh56_regs.npy")
     regressors = np.r_[regressors, regressors, regressors]

@@ -30,13 +30,14 @@ class CaImAn:
         self.ana_dir = "analysis"
         self.cell_radius_um = 3.0
         self.detrend_dff_quantile_min = 8
-        self.detrend_dff_time_window = 60   # time window in seconds
+        self.detrend_dff_time_window = 180   # time window in seconds
         self.pw_rigid = True  # Use non-rigid motion correction
         self.neuron_radius = 3.0
 
     @property
     def detrend_dff_params(self):
-        return {"quantileMin": self.detrend_dff_quantile_min, "frames_window": int(60/self.time_per_frame)}
+        return {"quantileMin": self.detrend_dff_quantile_min,
+                "frames_window": int(self.detrend_dff_time_window/self.time_per_frame)}
 
     def motion_correct(self, fname: str, save_projection=True) -> (np.ndarray, dict):
         """

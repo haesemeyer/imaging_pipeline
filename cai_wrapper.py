@@ -28,7 +28,6 @@ class CaImAn:
         self.fov_um = fov_um
         self.time_per_frame = t_p_f
         self.ana_dir = "analysis"
-        self.cell_radius_um = 3.0
         self.detrend_dff_quantile_min = 8
         self.detrend_dff_time_window = 180   # time window in seconds
         self.pw_rigid = True  # Use non-rigid motion correction
@@ -62,7 +61,7 @@ class CaImAn:
 
         fr = 1 / self.time_per_frame  # frame-rate
         dxy = (resolution, resolution)  # spatial resolution in um/pixel
-        max_shift_um = (self.cell_radius_um*4, self.cell_radius_um*4)  # maximally allow shift by ~2 cell diameters
+        max_shift_um = (self.neuron_radius*4, self.neuron_radius*4)  # maximally allow shift by ~2 cell diameters
         patch_motion_um = (50.0, 50.0)  # patch size for non-rigid motion correction
         # maximum allowed rigid shift in pixels
         max_shifts = [int(a / b) for a, b in zip(max_shift_um, dxy)]

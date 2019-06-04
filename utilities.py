@@ -83,3 +83,27 @@ def transform_pixel_coordinates(coords, z_plane, dxy_um, dz_um,):
     z = np.full(coords.shape[0], z_plane*dz_um)
     dxy = np.array([dx, dy])[None, :]
     return np.c_[coords*dxy, z]
+
+
+def trial_average(activity_matrix: np.ndarray, n_trials: int, sum_it=False, rem_nan=False) -> np.ndarray:
+    """
+    Compute trial average for each trace in activity_matrix
+    :param activity_matrix: n_cells x n_timepoints matrix of traces
+    :param n_trials: The number of trials across which to average
+    :param sum_it: If true, summing instead of averaging will be performed
+    :param rem_nan: If true, nan-mean or nan-sum will be used across trials
+    :return: n_cells x (n_timepoints//n_trials) matrix of trial averaged activity traces
+    """
+    if activity_matrix.shape[1] % n_trials != 0:
+        raise ValueError(f"Axis 1 of activity_matrix has {activity_matrix.shape[1]} timepoints which is not divisible"
+                         f"into the requested number of {n_trials} trials")
+    if activity_matrix.ndim == 2:
+        m_t = np.reshape(activity_matrix, (activity_matrix.shape[0], n_trials, activity_matrix.shape[1] // n_trials))
+    elif activity_matrix.ndim == 1:
+        m_t = np.reshape(activity_matrix, (1, n_trials, activity_matrix.shape[0] // n_trials))
+    else:
+        raise ValueError(f"Activity matrix has to be a vector or 2D matrix but is {activity_matrix.ndim} dimensional")
+    if sum_it:
+        return np.nansum(m_t, 1) if rem_nan else np.sum(m_t, 1)
+    else:
+        return np.nanmean(m_t, 1) if rem_nan else np.mean(m_t, 1)

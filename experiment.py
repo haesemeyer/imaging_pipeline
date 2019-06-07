@@ -11,12 +11,12 @@ import h5py
 from cai_wrapper import CaImAn
 from experiment_parser import ExperimentParser
 import numpy as np
-from utilities import get_component_centroids
+from utilities import get_component_centroids, get_component_coordinates
 
 
-class Experiment:
+class Experiment2P:
     """
-    Represents an imaging experiment on which cells have been segmented
+    Represents a 2-photon imaging experiment on which cells have been segmented
     """
     def __init__(self):
         self.info_data = {}  # data from the experiment's info data
@@ -29,6 +29,8 @@ class Experiment:
         self.all_c = []  # for each experimental plane the inferred calcium of each extracted unit
         self.all_dff = []  # for each experimental plane the dF/F of each extracted unit
         self.all_centroids = []  # for each experimental plane the unit centroid coordinates as (x [col]/y [row]) pairs
+        self.all_sizes = []  # for each experimental plane the size of each unit in pixels (not weighted)
+        self.projections = []  # list of 32 bit plane projections after motion correction
         self.mcorr_dict = {}  # the motion correction parameters used on each plane
         self.cnmf_extract_dict = {}  # the cnmf source extraction parameters used on each plane
         self.cnmf_val_dict = {}  # the cnmf validation parameters used on each plane
@@ -47,7 +49,7 @@ class Experiment:
         """
         if func_channel < 0 or func_channel > 1:
             raise ValueError(f'func_channel {func_channel} is not valid. Has to be 0 ("green"") or 1 ("red"")')
-        exp = Experiment()
+        exp = Experiment2P()
         exp.scope_name = scope_name
         exp.comment = comment
         # copy acquisition information extracted from experiment files
@@ -75,6 +77,7 @@ class Experiment:
         for ifile in data_files:
             print(f"Now analyzing: {ifile}")
             images, exp.mcorr_dict = cai_wrapper.motion_correct(ifile)
+            exp.projections.append(np.sum(images, 0))
             print("Motion correction completed")
             cnm2, params = cai_wrapper.extract_components(images, ifile)[1:]
             exp.cnmf_extract_dict = params["CNMF"]
@@ -83,7 +86,10 @@ class Experiment:
             exp.all_c.append(cnm2.estimates.C)
             exp.all_dff.append(cnm2.estimates.F_dff)
             exp.all_centroids.append(get_component_centroids(cnm2.estimates.A))
+            coords, weights = get_component_coordinates(cnm2.estimates.A)
+            exp.all_sizes.append(np.array([w.size for w in weights]))
             # TODO: Add spatial unit composition to experiment class
+        return exp
 
     @staticmethod
     def load_experiment(file_name: str):
@@ -92,7 +98,8 @@ class Experiment:
         :param file_name: The name of the hdf5 file storing the experiment
         :return: Experiment object with all relevant data
         """
-        raise NotImplementedError()
+        with h5py.File(file_name, 'r') as dfile:
+            pass
 
     def save_experiment(self, file_name: str, ovr_if_exists=False):
         """
@@ -100,4 +107,15 @@ class Experiment:
         :param file_name: The name of the file to save to
         :param ovr_if_exists: If set to true and file exists it will be overwritten otherwise exception will be raised
         """
-        raise NotImplementedError()
+        if ovr_if_exists:
+            dfile = h5py.File(file_name, "w")
+        else:
+            dfile = h5py.File(file_name, "x")
+        try:
+            dfile.create_dataset("experiment_name", data=self.experiment_name)
+        finally:
+            dfile.close()
+
+    @property
+    def n_planes(self):
+        return len(self.scanner_data)

@@ -14,6 +14,7 @@ import numpy as np
 from utilities import get_component_centroids, get_component_coordinates
 from datetime import datetime
 from os import path
+import pickle
 
 
 class Experiment2P:
@@ -115,9 +116,12 @@ class Experiment2P:
             exp.comment = dfile["comment"][()]
             # load singular parameter dictionaries
             exp.info_data = exp._load_dictionary("info_data", dfile)
-            exp.mcorr_dict = exp._load_dictionary("mcorr_dict", dfile)
-            exp.cnmf_extract_dict = exp._load_dictionary("cnmf_extract_dict", dfile)
-            exp.cnmf_val_dict = exp._load_dictionary("cnmf_val_dict", dfile)
+            ps = dfile["mcorr_dict"][()]
+            exp.mcorr_dict = pickle.loads(ps)
+            ps = dfile["cnmf_extract_dict"][()]
+            exp.cnmf_extract_dict = pickle.loads(ps)
+            ps = dfile["cnmf_val_dict"][()]
+            exp.cnmf_val_dict = pickle.loads(ps)
             # load per-plane data
             for i in range(n_planes):
                 plane_group = dfile[str(i)]
@@ -187,11 +191,15 @@ class Experiment2P:
             dfile.create_dataset("scope_name", data=self.scope_name)
             dfile.create_dataset("comment", data=self.comment)
             dfile.create_dataset("n_planes", data=self.n_planes)
-            # save singular parameter dictionaries
+            # save singular parameter dictionaries - due to mixed python types, caiman parameter
+            # dictionaries currently get pickled
             self._save_dictionary(self.info_data, "info_data", dfile)
-            self._save_dictionary(self.mcorr_dict, "mcorr_dict", dfile)
-            self._save_dictionary(self.cnmf_extract_dict, "cnmf_extract_dict", dfile)
-            self._save_dictionary(self.cnmf_val_dict, "cnmf_val_dict", dfile)
+            ps = pickle.dumps(self.mcorr_dict)
+            dfile.create_dataset("mcorr_dict", data=np.void(ps))
+            ps = pickle.dumps(self.cnmf_extract_dict)
+            dfile.create_dataset("cnmf_extract_dict", data=np.void(ps))
+            ps = pickle.dumps(self.cnmf_val_dict)
+            dfile.create_dataset("cnmf_val_dict", data=np.void(ps))
             # save per-plane data
             for i in range(self.n_planes):
                 plane_group = dfile.create_group(str(i))

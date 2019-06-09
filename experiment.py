@@ -80,7 +80,8 @@ class Experiment2P:
         for ifl in data_files:
             ifile = path.join(exp.original_path, ifl)
             print(f"Now analyzing: {ifile}")
-            images, exp.mcorr_dict = cai_wrapper.motion_correct(ifile)
+            images, params = cai_wrapper.motion_correct(ifile)
+            exp.mcorr_dict = params["Motion Correction"]
             exp.projections.append(np.sum(images, 0))
             print("Motion correction completed")
             cnm2, params = cai_wrapper.extract_components(images, ifile)[1:]
@@ -179,7 +180,7 @@ class Experiment2P:
         else:
             dfile = h5py.File(file_name, "x")
         try:
-            dfile.create_dataset("version", self.version)  # for later backwards compatibility
+            dfile.create_dataset("version", data=self.version)  # for later backwards compatibility
             # save general experiment data
             dfile.create_dataset("experiment_name", data=self.experiment_name)
             dfile.create_dataset("original_path", data=self.original_path)

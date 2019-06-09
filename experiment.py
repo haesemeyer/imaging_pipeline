@@ -103,9 +103,28 @@ class Experiment2P:
         """
         exp = Experiment2P()
         with h5py.File(file_name, 'r') as dfile:
+            exp.version = dfile["version"][()]  # in future allows for version specific loading
+            # load general experiment data
             n_planes = dfile["n_planes"][()]  # inferrred property of class but used here for loading plane data
             exp.experiment_name = dfile["experiment_name"][()]
-            pass
+            exp.original_path = dfile["original_path"][()]
+            exp.scope_name = dfile["scope_name"][()]
+            exp.comment = dfile["comment"][()]
+            # load singular parameter dictionaries
+            exp.info_data = exp._load_dictionary("info_data", dfile)
+            exp.mcorr_dict = exp._load_dictionary("mcorr_dict", dfile)
+            exp.cnmf_extract_dict = exp._load_dictionary("cnmf_extract_dict", dfile)
+            exp.cnmf_val_dict = exp._load_dictionary("cnmf_val_dict", dfile)
+            # load per-plane data
+            for i in range(n_planes):
+                plane_group = dfile[str(i)]
+                exp.scanner_data.append(exp._load_dictionary("scanner_data", plane_group))
+                exp.tail_data.append(plane_group["tail_data"][()])
+                exp.projections.append(plane_group["projection"][()])
+                exp.all_c.append(plane_group["C"][()])
+                exp.all_dff.append(plane_group["dff"][()])
+                exp.all_centroids.append(plane_group["centroids"][()])
+                exp.all_sizes.append(plane_group["sizes"][()])
         exp.populated = True
         return exp
 
@@ -158,14 +177,30 @@ class Experiment2P:
         else:
             dfile = h5py.File(file_name, "x")
         try:
+            dfile.create_dataset("version", self.version)  # for later backwards compatibility
             # save general experiment data
             dfile.create_dataset("experiment_name", data=self.experiment_name)
             dfile.create_dataset("original_path", data=self.original_path)
             dfile.create_dataset("scope_name", data=self.scope_name)
             dfile.create_dataset("comment", data=self.comment)
             dfile.create_dataset("n_planes", data=self.n_planes)
-            # save parameter dictionaries
+            # save singular parameter dictionaries
+            self._save_dictionary(self.info_data, "info_data", dfile)
+            self._save_dictionary(self.mcorr_dict, "mcorr_dict", dfile)
+            self._save_dictionary(self.cnmf_extract_dict, "cnmf_extract_dict", dfile)
+            self._save_dictionary(self.cnmf_val_dict, "cnmf_val_dict", dfile)
             # save per-plane data
+            for i in range(self.n_planes):
+                plane_group = dfile.create_group(str(i))
+                self._save_dictionary(self.scanner_data[i], "scanner_data", plane_group)
+                plane_group.create_dataset("tail_data", data=self.tail_data[i], compression="gzip", compression_opts=5)
+                plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
+                                           compression_opts=5)
+                plane_group.create_dataset("C", data=self.all_c[i], compression="gzip", compression_opts=5)
+                plane_group.create_dataset("dff", data=self.all_dff[i], compression="gzip", compression_opts=5)
+                plane_group.create_dataset("centroids", data=self.all_centroids[i], compression="gzip",
+                                           compression_opts=5)
+                plane_group.create_dataset("sizes", data=self.all_sizes[i], compression="gzip", compression_opts=5)
         finally:
             dfile.close()
 

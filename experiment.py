@@ -12,6 +12,7 @@ from cai_wrapper import CaImAn
 from experiment_parser import ExperimentParser
 import numpy as np
 from utilities import get_component_centroids, get_component_coordinates
+from datetime import datetime
 
 
 class Experiment2P:
@@ -35,6 +36,7 @@ class Experiment2P:
         self.cnmf_extract_dict = {}  # the cnmf source extraction parameters used on each plane
         self.cnmf_val_dict = {}  # the cnmf validation parameters used on each plane
         self.version = "unstable"  # version ID for future-proofing
+        self.populated = False  # indicates if class contains experimental data through analysis or loading
 
     @staticmethod
     def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_wrapper: CaImAn, func_channel=0):
@@ -89,6 +91,7 @@ class Experiment2P:
             coords, weights = get_component_coordinates(cnm2.estimates.A)
             exp.all_sizes.append(np.array([w.size for w in weights]))
             # TODO: Add spatial unit composition to experiment class
+        exp.populated = True
         return exp
 
     @staticmethod
@@ -98,8 +101,49 @@ class Experiment2P:
         :param file_name: The name of the hdf5 file storing the experiment
         :return: Experiment object with all relevant data
         """
+        exp = Experiment2P()
         with h5py.File(file_name, 'r') as dfile:
+            n_planes = dfile["n_planes"][()]  # inferrred property of class but used here for loading plane data
+            exp.experiment_name = dfile["experiment_name"][()]
             pass
+        exp.populated = True
+        return exp
+
+    @staticmethod
+    def _save_dictionary(d: dict, dict_name: str, file: h5py.File):
+        """
+        Saves a dictionary to hdf5 file. Note: Does not work for general dictionaries!
+        :param d: The dictionary to save
+        :param dict_name: The name of the dictionary
+        :param file: The hdf5 file to which the dictionary will be added
+        """
+        g = file.create_group(dict_name)
+        for k in d:
+            if "finish_time" in k or "start_time" in k:
+                # need to encode datetime object as string
+                date_time_string = d[k].strftime("%m/%d/%Y %I:%M:%S %p")
+                g.create_dataset(k, data=date_time_string)
+            else:
+                g.create_dataset(k, data=d[k])
+
+    @staticmethod
+    def _load_dictionary(dict_name: str, file: h5py.File):
+        """
+        Loads a experiment related dictionary from file
+        :param dict_name: The name of the dictionary
+        :param file: The hdf5 file containing the dictionary
+        :return: The populated dictionary
+        """
+        d = {}
+        g = file[dict_name]
+        for k in g:
+            if "finish_time" in k or "start_time" in k:
+                # need to decode string into datetime object
+                date_time_string = g[k][()]
+                d[k] = datetime.strptime(date_time_string, "%m/%d/%Y %I:%M:%S %p")
+            else:
+                d[k] = g[k][()]
+        return d
 
     def save_experiment(self, file_name: str, ovr_if_exists=False):
         """
@@ -107,12 +151,21 @@ class Experiment2P:
         :param file_name: The name of the file to save to
         :param ovr_if_exists: If set to true and file exists it will be overwritten otherwise exception will be raised
         """
+        if not self.populated:
+            raise ValueError("Empty experiment class cannot be saved. Load or analyze experiment first.")
         if ovr_if_exists:
             dfile = h5py.File(file_name, "w")
         else:
             dfile = h5py.File(file_name, "x")
         try:
+            # save general experiment data
             dfile.create_dataset("experiment_name", data=self.experiment_name)
+            dfile.create_dataset("original_path", data=self.original_path)
+            dfile.create_dataset("scope_name", data=self.scope_name)
+            dfile.create_dataset("comment", data=self.comment)
+            dfile.create_dataset("n_planes", data=self.n_planes)
+            # save parameter dictionaries
+            # save per-plane data
         finally:
             dfile.close()
 

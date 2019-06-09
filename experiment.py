@@ -13,6 +13,7 @@ from experiment_parser import ExperimentParser
 import numpy as np
 from utilities import get_component_centroids, get_component_coordinates
 from datetime import datetime
+from os import path
 
 
 class Experiment2P:
@@ -66,7 +67,7 @@ class Experiment2P:
         try:
             if eparser.has_tail_data:
                 for tf in eparser.tail_files:
-                    exp.tail_data.append(np.genfromtxt(tf, delimiter='\t'))
+                    exp.tail_data.append(np.genfromtxt(path.join(exp.original_path, tf), delimiter='\t'))
         except (IOError, OSError) as e:
             print(f".tail files are present but at least one file failed to load. Not attaching any tail data.")
             print(e)
@@ -76,7 +77,8 @@ class Experiment2P:
             print(f"This experiment has dual channel data. Ch{func_channel} is being processed as functional channel."
                   f" Other, anatomy channel, is currently being ignored")
         data_files = eparser.ch_0_files if func_channel == 0 else eparser.ch_1_files
-        for ifile in data_files:
+        for ifl in data_files:
+            ifile = path.join(exp.original_path, ifl)
             print(f"Now analyzing: {ifile}")
             images, exp.mcorr_dict = cai_wrapper.motion_correct(ifile)
             exp.projections.append(np.sum(images, 0))

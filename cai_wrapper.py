@@ -17,33 +17,63 @@ from caiman.source_extraction.cnmf import params as params
 
 
 class CaImAn:
-    def __init__(self, indicator_decay_time: float, fov_um: float, t_p_f: float):
+    def __init__(self, indicator_decay_time: float, fov_um: float, time_per_frame: float, **kwargs):
         """
         Creates new CaImAn instance
         :param indicator_decay_time: Decay time of the calcium indicator in seconds
         :param fov_um: The size of the imaged fov in um
-        :param t_p_f: The time of each frame acquisition in seconds
+        :param time_per_frame: The time of each frame acquisition in seconds
         """
+        # NOTE: There are still hidden and non-settable parameters in "extract_components"
         self.decay_time = indicator_decay_time
         self.fov_um = fov_um
-        self.time_per_frame = t_p_f
-        self.ana_dir = "analysis"
-        self.detrend_dff_quantile_min = 8
-        self.detrend_dff_time_window = 180   # time window in seconds
-        self.pw_rigid = True  # Use non-rigid motion correction
-        self.neuron_radius = 3.0
+        self.time_per_frame = time_per_frame
+        # directory for saving motion correction results
+        if"ana_dir" in kwargs:
+            self.ana_dir = kwargs["ana_dir"]
+        else:
+            self.ana_dir = "analysis"
+        # quantile for dff detrending
+        if"detrend_dff_quantile_min" in kwargs:
+            self.detrend_dff_quantile_min = kwargs["detrend_dff_quantile_min"]
+        else:
+            self.detrend_dff_quantile_min = 8
+        # time window for detrending quantile measurement in seconds
+        if"detrend_dff_time_window" in kwargs:
+            self.detrend_dff_time_window = kwargs["detrend_dff_time_window"]
+        else:
+            self.detrend_dff_time_window = 180
+        # Indicates whether to use non-rigid motion correction
+        if"pw_rigid" in kwargs:
+            self.pw_rigid = kwargs["pw_rigid"]
+        else:
+            self.pw_rigid = True
+        # The expected radius of neurons in the dataset in um
+        if"neuron_radius" in kwargs:
+            self.neuron_radius = kwargs["neuron_radius"]
+        else:
+            self.neuron_radius = 3.0
+        # The size of patches for non-rigid motion correction in um
+        if"patch_motion_um" in kwargs:
+            self.patch_motion_um = kwargs["patch_motion_um"]
+        else:
+            self.patch_motion_um = (50.0, 50.0)  # patch size for non-rigid motion correction
+        # Whether to save a motion corrected projection through the stack
+        if"save_projection" in kwargs:
+            self.save_projection = kwargs["save_projection"]
+        else:
+            self.save_projection = True
 
     @property
     def detrend_dff_params(self):
         return {"quantileMin": self.detrend_dff_quantile_min,
                 "frames_window": int(self.detrend_dff_time_window/self.time_per_frame)}
 
-    def motion_correct(self, fname: str, save_projection=True) -> (np.ndarray, dict):
+    def motion_correct(self, fname: str) -> (np.ndarray, dict):
         """
         Uses caiman non-rigid motion correction to remove/reduce motion artefacts
         Note: ALways saves an intermediate mem-map representation in order C of the corrected 32-bit stack
         :param fname: The filename of the source file
-        :param save_projection: If true a 16bit anatomical projection through the stack will be saved
         :return:
             [0]: Corrected stack as a memmap
             [1]: Wrapped CaImAn parameter dictionary
@@ -62,11 +92,10 @@ class CaImAn:
         fr = 1 / self.time_per_frame  # frame-rate
         dxy = (resolution, resolution)  # spatial resolution in um/pixel
         max_shift_um = (self.neuron_radius*4, self.neuron_radius*4)  # maximally allow shift by ~2 cell diameters
-        patch_motion_um = (50.0, 50.0)  # patch size for non-rigid motion correction
         # maximum allowed rigid shift in pixels
         max_shifts = [int(a / b) for a, b in zip(max_shift_um, dxy)]
         # start a new patch for pw-rigid motion correction every x pixels
-        strides = tuple([int(a / b) for a, b in zip(patch_motion_um, dxy)])
+        strides = tuple([int(a / b) for a, b in zip(self.patch_motion_um, dxy)])
         # overlap between patches (size of patch in pixels: strides+overlaps)
         overlaps = (24, 24)
         # maximum deviation allowed for patch with respect to rigid shifts (unit unclear - likely pixels as it is int)
@@ -106,7 +135,7 @@ class CaImAn:
             # now load the new file and transform output into [z,y,x] stack
             yr, dims, n_t = cm.load_memmap(fname_new)
             images = np.reshape(yr.T, [n_t] + list(dims), order='F')
-            if save_projection:
+            if self.save_projection:
                 # save anatomical projection as 16bit tif
                 anat_projection = images.copy()
                 anat_projection = np.sum(anat_projection, 0)

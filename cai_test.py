@@ -8,23 +8,11 @@ Script for testing caiman - cai_demo.py implementation with slight adjustments
 
 
 import numpy as np
-from os import path
 from utilities import ui_get_file, trial_average
 import matplotlib.pyplot as pl
 import seaborn as sns
-import logging
-from cai_wrapper import CaImAn
-from experiment_parser import ExperimentParser
-
-logging.basicConfig(format=
-                    "%(relativeCreated)12d [%(filename)s:%(funcName)20s():%(lineno)s]"\
-                    "[%(process)d] %(message)s", level=logging.WARN)
-
-
-def main2(fov, t_per_frame, filename):
-    cai = CaImAn(4.0, fov, t_per_frame)
-    im = cai.motion_correct(filename)[0]
-    return cai.extract_components(im, filename)[1]
+from experiment import Experiment2P
+from os import path
 
 
 if __name__ == "__main__":
@@ -33,27 +21,22 @@ if __name__ == "__main__":
     info_file = ui_get_file(filetypes=[('Experiment info', '*.info')], multiple=False)
     if type(info_file) == list:
         info_file = info_file[0]
-    eparser = ExperimentParser(info_file)
-    fnames = [path.join(eparser.original_path, ch0) for ch0 in eparser.ch_0_files]
-    frame_duration = eparser.info_data["frame_duration"]
-    all_c = []
-    for i, fn in enumerate(fnames):
-        fit_cnm2 = main2(eparser.scanner_data[i]["fov"], frame_duration, fn)
-        all_c.append(fit_cnm2.estimates.C)
-    all_c = [a for b in all_c for a in b]
+    exp = Experiment2P().analyze_experiment(info_file, "Harvard 2P", "", {"indicator_decay_time": 4.0})
+    all_c = [a for b in exp.all_c for a in b]
     regressors = np.load("rh56_regs.npy")
     regressors = np.r_[regressors, regressors, regressors]
     r_times = np.arange(regressors.shape[0]) / 5
     r_mat = np.full((len(all_c), regressors.shape[1]), np.nan)
     interp_c = np.zeros((len(all_c), r_times.size))
     for j, trace in enumerate(all_c):
-        data_times = np.arange(trace.size) * frame_duration
+        data_times = np.arange(trace.size) * exp.info_data["frame_duration"]
         i_trace = np.interp(r_times, data_times, trace)
         interp_c[j, :] = i_trace
     tavg_interp_c = trial_average(interp_c, 3)
     for i, reg in enumerate(regressors.T):
         for j, i_trace in enumerate(tavg_interp_c):
             r_mat[j, i] = np.corrcoef(i_trace, reg[:reg.size//3])[0, 1]
+
     fig, (ax1, ax2) = pl.subplots(1, 2)
     sns.heatmap(r_mat, vmin=-1, vmax=1, center=0, ax=ax1)
     r_mat[r_mat < 0.6] = 0
@@ -77,3 +60,5 @@ if __name__ == "__main__":
     ax.set_ylabel("Trial average C")
     ax.legend()
     sns.despine(fig, ax)
+
+    exp.save_experiment(f"{path.join(exp.original_path, exp.experiment_name)}.hdf5")

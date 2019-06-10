@@ -34,23 +34,25 @@ class Experiment2P:
         self.all_centroids = []  # for each experimental plane the unit centroid coordinates as (x [col]/y [row]) pairs
         self.all_sizes = []  # for each experimental plane the size of each unit in pixels (not weighted)
         self.projections = []  # list of 32 bit plane projections after motion correction
-        self.mcorr_dict = {}  # the motion correction parameters used on each plane
-        self.cnmf_extract_dict = {}  # the cnmf source extraction parameters used on each plane
-        self.cnmf_val_dict = {}  # the cnmf validation parameters used on each plane
+        self.mcorr_dicts = []  # the motion correction parameters used on each plane
+        self.cnmf_extract_dicts = []  # the cnmf source extraction parameters used on each plane
+        self.cnmf_val_dicts = []  # the cnmf validation parameters used on each plane
         self.version = "unstable"  # version ID for future-proofing
         self.populated = False  # indicates if class contains experimental data through analysis or loading
 
     @staticmethod
-    def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_wrapper: CaImAn, func_channel=0):
+    def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_params: dict, func_channel=0):
         """
         Performs the intial analysis (file collection and segmentation) on the experiment identified by the info file
         :param info_file_name: The path and name of the info-file identifying the experiment
         :param scope_name: Identifier of the microscope used for the experiment
         :param comment: Comment associated with the experiment
-        :param cai_wrapper: CaImAn wrapper object used to extract calcium data
+        :param cai_params: Dictionary of caiman parameters - fov and time-per-frame will be replaced with exp. data
         :param func_channel: The channel (either 0 or 1) containing the functional imaging data
         :return: Experiment object with all relevant data
         """
+        if "indicator_decay_time" not in cai_params:
+            raise ValueError("At least 'indicator_decay_time' has to be specified in cai_params")
         if func_channel < 0 or func_channel > 1:
             raise ValueError(f'func_channel {func_channel} is not valid. Has to be 0 ("green"") or 1 ("red"")')
         exp = Experiment2P()
@@ -78,23 +80,26 @@ class Experiment2P:
             print(f"This experiment has dual channel data. Ch{func_channel} is being processed as functional channel."
                   f" Other, anatomy channel, is currently being ignored")
         data_files = eparser.ch_0_files if func_channel == 0 else eparser.ch_1_files
-        for ifl in data_files:
+        for i, ifl in enumerate(data_files):
+            cai_params["time_per_frame"] = exp.info_data["frame_duration"]
+            cai_params["fov_um"] = exp.scanner_data[i]["fov"]
+            cai_wrapper = CaImAn(**cai_params)
             ifile = path.join(exp.original_path, ifl)
             print(f"Now analyzing: {ifile}")
             images, params = cai_wrapper.motion_correct(ifile)
-            exp.mcorr_dict = params["Motion Correction"]
+            exp.mcorr_dicts.append(params["Motion Correction"])
             exp.projections.append(np.sum(images, 0))
             print("Motion correction completed")
             cnm2, params = cai_wrapper.extract_components(images, ifile)[1:]
-            exp.cnmf_extract_dict = params["CNMF"]
-            exp.cnmf_val_dict = params["Validation"]
+            exp.cnmf_extract_dicts.append(params["CNMF"])
+            exp.cnmf_val_dicts.append(params["Validation"])
             print("Source extraction completed")
             exp.all_c.append(cnm2.estimates.C)
             exp.all_dff.append(cnm2.estimates.F_dff)
             exp.all_centroids.append(get_component_centroids(cnm2.estimates.A))
             coords, weights = get_component_coordinates(cnm2.estimates.A)
             exp.all_sizes.append(np.array([w.size for w in weights]))
-            # TODO: Add spatial unit composition to experiment class
+            # Note: Add spatial unit composition to experiment class in addition to centroids
         exp.populated = True
         return exp
 
@@ -114,14 +119,8 @@ class Experiment2P:
             exp.original_path = dfile["original_path"][()]
             exp.scope_name = dfile["scope_name"][()]
             exp.comment = dfile["comment"][()]
-            # load singular parameter dictionaries
+            # load singular parameter dictionary
             exp.info_data = exp._load_dictionary("info_data", dfile)
-            ps = dfile["mcorr_dict"][()]
-            exp.mcorr_dict = pickle.loads(ps)
-            ps = dfile["cnmf_extract_dict"][()]
-            exp.cnmf_extract_dict = pickle.loads(ps)
-            ps = dfile["cnmf_val_dict"][()]
-            exp.cnmf_val_dict = pickle.loads(ps)
             # load per-plane data
             for i in range(n_planes):
                 plane_group = dfile[str(i)]
@@ -132,6 +131,12 @@ class Experiment2P:
                 exp.all_dff.append(plane_group["dff"][()])
                 exp.all_centroids.append(plane_group["centroids"][()])
                 exp.all_sizes.append(plane_group["sizes"][()])
+                ps = plane_group["mcorr_dict"][()]
+                exp.mcorr_dicts.append(pickle.loads(ps))
+                ps = plane_group["cnmf_extract_dict"][()]
+                exp.cnmf_extract_dicts.append(pickle.loads(ps))
+                ps = plane_group["cnmf_val_dict"][()]
+                exp.cnmf_val_dicts.append(pickle.loads(ps))
         exp.populated = True
         return exp
 
@@ -191,15 +196,8 @@ class Experiment2P:
             dfile.create_dataset("scope_name", data=self.scope_name)
             dfile.create_dataset("comment", data=self.comment)
             dfile.create_dataset("n_planes", data=self.n_planes)
-            # save singular parameter dictionaries - due to mixed python types, caiman parameter
-            # dictionaries currently get pickled
+            # save singular parameter dictionary
             self._save_dictionary(self.info_data, "info_data", dfile)
-            ps = pickle.dumps(self.mcorr_dict)
-            dfile.create_dataset("mcorr_dict", data=np.void(ps))
-            ps = pickle.dumps(self.cnmf_extract_dict)
-            dfile.create_dataset("cnmf_extract_dict", data=np.void(ps))
-            ps = pickle.dumps(self.cnmf_val_dict)
-            dfile.create_dataset("cnmf_val_dict", data=np.void(ps))
             # save per-plane data
             for i in range(self.n_planes):
                 plane_group = dfile.create_group(str(i))
@@ -212,6 +210,13 @@ class Experiment2P:
                 plane_group.create_dataset("centroids", data=self.all_centroids[i], compression="gzip",
                                            compression_opts=5)
                 plane_group.create_dataset("sizes", data=self.all_sizes[i], compression="gzip", compression_opts=5)
+                # due to mixed python types in caiman parameter dictionaries these currently get pickled
+                ps = pickle.dumps(self.mcorr_dicts[i])
+                plane_group.create_dataset("mcorr_dict", data=np.void(ps))
+                ps = pickle.dumps(self.cnmf_extract_dicts[i])
+                plane_group.create_dataset("cnmf_extract_dict", data=np.void(ps))
+                ps = pickle.dumps(self.cnmf_val_dicts[i])
+                plane_group.create_dataset("cnmf_val_dict", data=np.void(ps))
         finally:
             dfile.close()
 

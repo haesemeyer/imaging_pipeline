@@ -94,10 +94,10 @@ class Experiment2P:
             exp.cnmf_extract_dicts.append(params["CNMF"])
             exp.cnmf_val_dicts.append(params["Validation"])
             print("Source extraction completed")
-            exp.all_c.append(cnm2.estimates.C)
-            exp.all_dff.append(cnm2.estimates.F_dff)
-            exp.all_centroids.append(get_component_centroids(cnm2.estimates.A))
-            coords, weights = get_component_coordinates(cnm2.estimates.A)
+            exp.all_c.append(cnm2.estimates.C.copy())
+            exp.all_dff.append(cnm2.estimates.F_dff.copy())
+            exp.all_centroids.append(get_component_centroids(cnm2.estimates.A, images.shape[1], images.shape[2]))
+            coords, weights = get_component_coordinates(cnm2.estimates.A, images.shape[1], images.shape[2])
             exp.all_sizes.append(np.array([w.size for w in weights]))
             # Note: Add spatial unit composition to experiment class in addition to centroids
         exp.populated = True

@@ -28,11 +28,13 @@ def ui_get_file(filetypes=None, multiple=False):
     return tkFileDialog.askopenfilename(**options)
 
 
-def get_component_coordinates(matrix_a):
+def get_component_coordinates(matrix_a, im_dim_0: int, im_dim_1: int):
     """
     For each component in the sparse cnmf.estimates.A matrix, returns the x-y pixel coordinates
     of constituent pixels
     :param matrix_a: Sparse spatial component matrix of estimates object
+    :param im_dim_0: The size of the first dimension of the original image stack
+    :param im_dim_1: The size of the second dimension of the original image stack
     :return:
         [0]: List of length n_components of n_pixel*2 x[column]-y[row] coordinates
         [1]: List of coordinate weights
@@ -42,7 +44,7 @@ def get_component_coordinates(matrix_a):
     weights = []
     for i in range(n_comp):
         # re-transform sparse F flattened representation into image matrix
-        im = matrix_a[:, i].toarray().reshape(512, 512, order='F')
+        im = matrix_a[:, i].toarray().reshape(im_dim_0, im_dim_1, order='F')
         y, x = np.where(im > 0)
         w = im[y, x]
         coordinates.append(np.c_[x[:, None], y[:, None]])
@@ -50,16 +52,18 @@ def get_component_coordinates(matrix_a):
     return coordinates, weights
 
 
-def get_component_centroids(matrix_a):
+def get_component_centroids(matrix_a, im_dim_0: int, im_dim_1: int):
     """
     For each component in the sparse cnmf.estimates.A matrix, returns the x-y coordinates
     of the weighted centroid
     :param matrix_a: Sparse spatial component matrix of estimates object
+    :param im_dim_0: The size of the first dimension of the original image stack
+    :param im_dim_1: The size of the second dimension of the original image stack
     :return:  Array of n_components x 2 x/y centroid coordinates
     """
     n_comp = matrix_a.shape[1]
     centroids = np.full((n_comp, 2), np.nan)
-    coords, weights = get_component_coordinates(matrix_a)
+    coords, weights = get_component_coordinates(matrix_a, im_dim_0, im_dim_1)
     for i, (c, w) in enumerate(zip(coords, weights)):
         centroids[i, :] = np.sum(c * w[:, None], 0) / w.sum()
     return centroids

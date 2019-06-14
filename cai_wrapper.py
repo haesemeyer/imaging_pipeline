@@ -63,6 +63,42 @@ class CaImAn:
             self.save_projection = kwargs["save_projection"]
         else:
             self.save_projection = True
+        # Validation - signal to noise values of transients
+        if"min_snr" in kwargs:
+            self.min_snr = kwargs["min_snr"]
+        else:
+            self.min_snr = 2.5  # signal to noise ratio for definitely accepting a component
+        if"snr_lowest" in kwargs:
+            self.snr_lowest = kwargs["snr_lowest"]
+        else:
+            self.snr_lowest = 1  # signal to noise ratio below which to definitely reject a component
+        # Validation - spatial correlations
+        # The spatial correlation essentially seems to be a correlation of mean spatial intensity
+        # of the t-stack during active frames with the footprint of the spatial component, i.e. asking
+        # the question whether especially bright pixels contribute most to the temporal trace
+        if"rval_thr" in kwargs:
+            self.rval_thr = kwargs["rval_thr"]
+        else:
+            self.rval_thr = 0.85  # space correlation threshold for definitely accepting a component
+        if"rval_lowest" in kwargs:
+            self.rval_lowest = kwargs["rval_lowest"]
+        else:
+            self.rval_lowest = 0.5  # space correlation below which a component is definitely rejected
+        # Validation - CNN on component morphology
+        # Since the CNN has likely been trained on (mouse) cytoplasmic stain, it is unclear whether it is ideal
+        # for zebrafish nuclear gcamp - therfore default minimal probability set rather low.
+        if"use_cnn" in kwargs:
+            self.use_cnn = kwargs["use_cnn"]
+        else:
+            self.use_cnn = True
+        if"cnn_thr" in kwargs:
+            self.cnn_thr = kwargs["cnn_thr"]
+        else:
+            self.cnn_thr = 0.99  # CNN based classifier - probability above this value is automatically accepted
+        if"cnn_lowest" in kwargs:
+            self.cnn_lowest = kwargs["cnn_lowest"]
+        else:
+            self.cnn_lowest = 0.4
 
     @property
     def detrend_dff_params(self):
@@ -207,22 +243,16 @@ class CaImAn:
             # rerun seeded CNMF on accepted patches to refine and perform deconvolution
             cnm.params.change_params({'p': p})
             cnm2 = cnm.refit(images, dview=dview)
-            # component evaluations
-            # components are evaluated in three ways:
-            #   a) the shape of each component must be correlated with the data
-            #   b) a minimum peak SNR is required over the length of a transient
-            #   c) each shape passes a CNN based classifier
-            min_SNR = 2  # signal to noise ratio for accepting a component
-            rval_thr = 0.8  # space correlation threshold for accepting a component
-            cnn_thr = 0.99  # threshold for CNN based classifier
-            cnn_lowest = 0.1  # neurons with cnn probability lower than this value are rejected
+            # Validate components
             val_dict = {
                 'decay_time': self.decay_time,
-                'min_SNR': min_SNR,
-                'rval_thr': rval_thr,
-                'use_cnn': True,
-                'min_cnn_thr': cnn_thr,
-                'cnn_lowest': cnn_lowest}
+                'min_SNR': self.min_snr,
+                'SNR_lowest': self.snr_lowest,
+                'rval_thr': self.rval_thr,
+                'rval_lowest': self.rval_lowest,
+                'use_cnn': self.use_cnn,
+                'min_cnn_thr': self.cnn_thr,
+                'cnn_lowest': self.cnn_lowest}
             cnm2.params.set('quality', val_dict)
             cnm2.estimates.evaluate_components(images, cnm2.params, dview=dview)
             # update object with selected components

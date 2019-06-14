@@ -230,7 +230,7 @@ class CaImAn:
                          'method_init': method_init,
                          'rolling_sum': True,
                          'merge_thr': merge_thr,
-                         'n_processes': n_processes,
+                         'n_processes': int(n_processes),  # return type is numpy.int64 which can't json serialize
                          'only_init': True,
                          'ssub': ssub,
                          'tsub': tsub}

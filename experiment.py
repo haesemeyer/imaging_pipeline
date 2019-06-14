@@ -14,7 +14,7 @@ import numpy as np
 from utilities import get_component_centroids, get_component_coordinates
 from datetime import datetime
 from os import path
-import pickle
+import json
 
 
 class Experiment2P:
@@ -132,11 +132,11 @@ class Experiment2P:
                 exp.all_centroids.append(plane_group["centroids"][()])
                 exp.all_sizes.append(plane_group["sizes"][()])
                 ps = plane_group["mcorr_dict"][()]
-                exp.mcorr_dicts.append(pickle.loads(ps))
+                exp.mcorr_dicts.append(json.loads(ps))
                 ps = plane_group["cnmf_extract_dict"][()]
-                exp.cnmf_extract_dicts.append(pickle.loads(ps))
+                exp.cnmf_extract_dicts.append(json.loads(ps))
                 ps = plane_group["cnmf_val_dict"][()]
-                exp.cnmf_val_dicts.append(pickle.loads(ps))
+                exp.cnmf_val_dicts.append(json.loads(ps))
         exp.populated = True
         return exp
 
@@ -211,12 +211,12 @@ class Experiment2P:
                                            compression_opts=5)
                 plane_group.create_dataset("sizes", data=self.all_sizes[i], compression="gzip", compression_opts=5)
                 # due to mixed python types in caiman parameter dictionaries these currently get pickled
-                ps = pickle.dumps(self.mcorr_dicts[i])
-                plane_group.create_dataset("mcorr_dict", data=np.void(ps))
-                ps = pickle.dumps(self.cnmf_extract_dicts[i])
-                plane_group.create_dataset("cnmf_extract_dict", data=np.void(ps))
-                ps = pickle.dumps(self.cnmf_val_dicts[i])
-                plane_group.create_dataset("cnmf_val_dict", data=np.void(ps))
+                ps = json.dumps(self.mcorr_dicts[i])
+                plane_group.create_dataset("mcorr_dict", data=ps)
+                ps = json.dumps(self.cnmf_extract_dicts[i])
+                plane_group.create_dataset("cnmf_extract_dict", data=ps)
+                ps = json.dumps(self.cnmf_val_dicts[i])
+                plane_group.create_dataset("cnmf_val_dict", data=ps)
         finally:
             dfile.close()
 

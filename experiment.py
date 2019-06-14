@@ -33,6 +33,7 @@ class Experiment2P:
         self.all_dff = []  # for each experimental plane the dF/F of each extracted unit
         self.all_centroids = []  # for each experimental plane the unit centroid coordinates as (x [col]/y [row]) pairs
         self.all_sizes = []  # for each experimental plane the size of each unit in pixels (not weighted)
+        self.all_spatial = []  # for each experimental plane n_comp x 4 array <component-ix, weight, x-coord, y-coord>
         self.projections = []  # list of 32 bit plane projections after motion correction
         self.mcorr_dicts = []  # the motion correction parameters used on each plane
         self.cnmf_extract_dicts = []  # the cnmf source extraction parameters used on each plane
@@ -99,7 +100,12 @@ class Experiment2P:
             exp.all_centroids.append(get_component_centroids(cnm2.estimates.A, images.shape[1], images.shape[2]))
             coords, weights = get_component_coordinates(cnm2.estimates.A, images.shape[1], images.shape[2])
             exp.all_sizes.append(np.array([w.size for w in weights]))
-            # Note: Add spatial unit composition to experiment class in addition to centroids
+            spatial_footprints = []
+            for c_ix, (comp_coords, comp_weights) in enumerate(zip(coords, weights)):
+                ix = np.full(comp_coords.shape[0], c_ix)[:, None]
+                spat = np.c_[ix, comp_weights[:, None], comp_coords]
+                spatial_footprints.append(spat)
+            exp.all_spatial.append(np.vstack(spatial_footprints))
         exp.populated = True
         return exp
 
@@ -131,6 +137,7 @@ class Experiment2P:
                 exp.all_dff.append(plane_group["dff"][()])
                 exp.all_centroids.append(plane_group["centroids"][()])
                 exp.all_sizes.append(plane_group["sizes"][()])
+                exp.all_spatial.append(plane_group["spatial"][()])
                 ps = plane_group["mcorr_dict"][()]
                 exp.mcorr_dicts.append(json.loads(ps))
                 ps = plane_group["cnmf_extract_dict"][()]
@@ -210,6 +217,7 @@ class Experiment2P:
                 plane_group.create_dataset("centroids", data=self.all_centroids[i], compression="gzip",
                                            compression_opts=5)
                 plane_group.create_dataset("sizes", data=self.all_sizes[i], compression="gzip", compression_opts=5)
+                plane_group.create_dataset("spatial", data=self.all_spatial[i], compression="gzip", compression_opts=5)
                 # due to mixed python types in caiman parameter dictionaries these currently get pickled
                 ps = json.dumps(self.mcorr_dicts[i])
                 plane_group.create_dataset("mcorr_dict", data=ps)

@@ -13,6 +13,13 @@ import matplotlib.pyplot as pl
 import seaborn as sns
 from experiment import Experiment2P
 from os import path
+import logging
+import warnings
+
+
+# Shut down some noise clogging the interpreter
+logging.basicConfig(level=logging.ERROR)
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 if __name__ == "__main__":
@@ -60,5 +67,15 @@ if __name__ == "__main__":
     ax.set_ylabel("Trial average C")
     ax.legend()
     sns.despine(fig, ax)
+
+    fig, axes = pl.subplots(ncols=int(np.sqrt(exp.n_planes)), nrows=int(np.sqrt(exp.n_planes)))
+    axes = axes.ravel()
+    for i in range(exp.n_planes):
+        if i >= axes.size:
+            break
+        axes[i].imshow(exp.projections[i], vmax=np.percentile(exp.projections[i], 90))
+        cents = exp.all_centroids[i]
+        axes[i].scatter(cents[:, 0], cents[:, 1], s=2, color='C1')
+    fig.tight_layout()
 
     exp.save_experiment(f"{path.join(exp.original_path, exp.experiment_name)}.hdf5")

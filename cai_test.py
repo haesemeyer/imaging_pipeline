@@ -52,25 +52,23 @@ if __name__ == "__main__":
     membership = np.full(r_mat.shape[0], -1)
     membership[np.max(r_mat, 1) > 0] = np.argmax(r_mat, 1)[np.max(r_mat, 1) > 0]
 
-    fig, ax = pl.subplots()
-    sns.tsplot(tavg_interp_c[membership == 0, :], r_times[:r_times.size // 3], color="C3", ax=ax,
-               condition=f"Fast ON: {np.sum(membership==0)}")
-    sns.tsplot(tavg_interp_c[membership == 1, :], r_times[:r_times.size // 3], color="C1", ax=ax,
-               condition=f"Slow ON: {np.sum(membership==1)}")
-    sns.tsplot(tavg_interp_c[membership == 2, :], r_times[:r_times.size // 3], color="C2", ax=ax,
-               condition=f"Fast OFF: {np.sum(membership==2)}")
-    sns.tsplot(tavg_interp_c[membership == 3, :], r_times[:r_times.size // 3], color="C0", ax=ax,
-               condition=f"Slow OFF: {np.sum(membership==3)}")
-    sns.tsplot(tavg_interp_c[membership == 4, :], r_times[:r_times.size // 3], color="C7", ax=ax,
-               condition=f"Dld. OFF: {np.sum(membership == 4)}")
-    ax.set_title(f"{membership.size} units total. {np.round(np.sum(membership > -1)/membership.size*100, 1)}"
-                 f" % heat sensitive")
-    ax.set_xlabel("Time [s]")
-    ax.set_ylabel("Trial average C")
-    ax.legend()
-    sns.despine(fig, ax)
+    colors = ["C3", "C1", "C2", "C0", "C7"]
+    labels = ["Fast ON", "Slow ON", "Fast OFF", "Slow OFF", "Dld. OFF"]
+    trial_times = r_times[:r_times.size // 3]
+    if np.sum(membership > -1) > 0:
+        fig, ax = pl.subplots()
+        for cid in range(5):
+            if np.sum(membership == cid) > 0:
+                sns.tsplot(tavg_interp_c[membership == cid, :], trial_times, color=colors[cid], ax=ax,
+                           condition=f"{labels[cid]}: {np.sum(membership==cid)}")
+        ax.set_title(f"{membership.size} units total. {np.round(np.sum(membership > -1)/membership.size*100, 1)}"
+                     f" % heat sensitive")
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("Trial average C")
+        ax.legend()
+        sns.despine(fig, ax)
 
-    fig, axes = pl.subplots(ncols=int(np.sqrt(exp.n_planes)), nrows=int(np.sqrt(exp.n_planes)))
+    fig, axes = pl.subplots(ncols=int(np.sqrt(exp.n_planes))+1, nrows=int(np.sqrt(exp.n_planes)))
     axes = axes.ravel()
     for i in range(exp.n_planes):
         if i >= axes.size:

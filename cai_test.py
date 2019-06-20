@@ -61,6 +61,8 @@ if __name__ == "__main__":
                condition=f"Fast OFF: {np.sum(membership==2)}")
     sns.tsplot(tavg_interp_c[membership == 3, :], r_times[:r_times.size // 3], color="C0", ax=ax,
                condition=f"Slow OFF: {np.sum(membership==3)}")
+    sns.tsplot(tavg_interp_c[membership == 4, :], r_times[:r_times.size // 3], color="C7", ax=ax,
+               condition=f"Dld. OFF: {np.sum(membership == 4)}")
     ax.set_title(f"{membership.size} units total. {np.round(np.sum(membership > -1)/membership.size*100, 1)}"
                  f" % heat sensitive")
     ax.set_xlabel("Time [s]")

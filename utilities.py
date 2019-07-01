@@ -15,6 +15,7 @@ except ImportError:
     import tkinter.filedialog as tkFileDialog
 
 import numpy as np
+import shutil
 
 
 def ui_get_file(filetypes=None, multiple=False):
@@ -111,3 +112,16 @@ def trial_average(activity_matrix: np.ndarray, n_trials: int, sum_it=False, rem_
         return np.nansum(m_t, 1) if rem_nan else np.sum(m_t, 1)
     else:
         return np.nanmean(m_t, 1) if rem_nan else np.mean(m_t, 1)
+
+
+def test_cmtk_install():
+    """
+    Tries to determine if CMTK is installed and whether individual binaries are directly accessible
+    or are accessible via the cmtk script call
+    :return: -1: No cmtk install detected, 0: Direct call, 1: call via cmtk script
+    """
+    if shutil.which("warp") is not None:
+        return 0
+    if shutil.which("cmtk") is not None:
+        return 1
+    return -1

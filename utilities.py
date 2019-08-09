@@ -16,6 +16,9 @@ except ImportError:
 
 import numpy as np
 import shutil
+import tempfile
+import subprocess as sp
+from os import path
 
 
 def ui_get_file(filetypes=None, multiple=False):
@@ -125,3 +128,34 @@ def test_cmtk_install():
     if shutil.which("cmtk") is not None:
         return 1
     return -1
+
+
+def cmtk_transform_3d_coordinates(coords: np.ndarray, transform_file: str) -> np.ndarray:
+    """
+    Uses cmtk and the indicated transform to map nx3 3D [x,y,z] coordinates into a reference space
+    In this case x: Columns in an image stack, left to right; y: Rows in an image stack, top to bottom; z: d-v
+    This is the same convention used in swc files and in extracting component coordinates above
+    :param coords: The nx3 matrix of 3D coordinates
+    :param transform_file: The transformation file path to use for mapping
+    :return: nx3 matrix of transformed coordinates
+    """
+    cmtki = test_cmtk_install()
+    if cmtki == -1:
+        raise OSError("cmtk installation not found")
+    if cmtki == 0:
+        prog = "streamxform"
+    else:
+        prog = "cmtk streamxform"
+    # set up temporary directory for transformation input and output
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        infile = path.join(tmpdirname, "input.txt")
+        outfile = path.join(tmpdirname, "output.txt")
+        np.savetxt(infile, coords, fmt="%.1f", delimiter=' ')
+        # NOTE: The following might have to be replaced with: 'cat {infile} | {prog} ... > {outfile}' on windows
+        command = f'{prog} -- --inverse "{transform_file}" < "{infile}" > "{outfile}"'
+        sp.run(command, shell=True)
+        coords_out = np.genfromtxt(outfile, delimiter=' ')[:, :3]
+        # for every transformed coordinate with at least one NaN replace all values with NaN
+        has_nan = np.sum(np.isnan(coords_out), 1) > 0
+        coords_out[has_nan, :] = np.nan
+    return coords_out

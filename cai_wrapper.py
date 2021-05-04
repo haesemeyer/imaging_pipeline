@@ -207,7 +207,11 @@ class CaImAn:
             p = 1  # order of the autoregressive system
             gnb = 2  # number of global background components
             merge_thr = 0.85  # merging threshold, max correlation allowed
-            rf = 15  # half-size of the patches in pixels. e.g., if rf=25, patches are 50x50
+            # TODO: Extraction fails if patch size is too small relative to neuron size (K<1).
+            #  Add intelligent computation of patch size
+            # size patch to roughly have an edge length of 8 cells
+            n_rad_pixels = self.neuron_radius / resolution
+            rf = int(n_rad_pixels*8)  # half-size of the patches in pixels
             stride_cnmf = 6  # amount of overlap between the patches in pixels
             patch_area_um = (rf * 2 * dxy[0]) ** 2  # we use this to calculate expected number of components per patch
             neur_area_um = np.pi * self.neuron_radius ** 2

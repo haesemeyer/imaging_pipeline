@@ -15,14 +15,22 @@ from experiment import Experiment2P
 from os import path
 import logging
 import warnings
+from sklearn.exceptions import ConvergenceWarning
 
 
 # Shut down some noise clogging the interpreter
 logging.basicConfig(level=logging.ERROR)
 warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=DeprecationWarning)
 
 
 if __name__ == "__main__":
+    # Shut down some noise clogging the interpreter
+    logging.basicConfig(level=logging.ERROR)
+    warnings.simplefilter(action='ignore', category=FutureWarning)
+    warnings.simplefilter(action='ignore', category=DeprecationWarning)
+    warnings.simplefilter(action='once', category=ConvergenceWarning)
+
     __spec__ = "ModuleSpec(name='builtins', loader=<class '_frozen_importlib.BuiltinImporter'>)"
 
     info_file = ui_get_file(filetypes=[('Experiment info', '*.info')], multiple=False)
@@ -59,8 +67,8 @@ if __name__ == "__main__":
         fig, ax = pl.subplots()
         for cid in range(5):
             if np.sum(membership == cid) > 0:
-                sns.tsplot(tavg_interp_c[membership == cid, :], trial_times, color=colors[cid], ax=ax,
-                           condition=f"{labels[cid]}: {np.sum(membership==cid)}")
+                ax.plot(trial_times, np.mean(tavg_interp_c[membership == cid, :], 0), color=colors[cid],
+                        label=f"{labels[cid]}: {np.sum(membership==cid)}")
         ax.set_title(f"{membership.size} units total. {np.round(np.sum(membership > -1)/membership.size*100, 1)}"
                      f" % heat sensitive")
         ax.set_xlabel("Time [s]")

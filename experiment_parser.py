@@ -138,6 +138,7 @@ class ExperimentParser:
         Create new experiment parser
         :param info_file_name: Path and name of .info file identifying the experiment
         """
+        # TODO: Add parameter that indicates ventro-dorsal acquisition and reverses file sort order in that case
         self.info_data = InfoFile(info_file_name).info
         # Extract experiment path and experiment name
         exp_path = path.dirname(info_file_name)

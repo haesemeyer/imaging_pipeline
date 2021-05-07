@@ -195,10 +195,10 @@ class CaImAn:
 
             # Repeat for the co-stack if present
             if co_fname is not None:
-                co_aligned_movie = mc.apply_shifts_movie(co_fname)
+                co_aligned_images = np.array(mc.apply_shifts_movie(co_fname))
                 if self.save_projection:
                     # save anatomical projection as 16bit tif
-                    anat_projection = np.sum(co_aligned_movie, 0)
+                    anat_projection = np.sum(co_aligned_images, 0)
                     anat_projection -= anat_projection.min()
                     anat_projection /= anat_projection.max()
                     anat_projection *= (2 ** 16 - 1)
@@ -208,10 +208,10 @@ class CaImAn:
                     imsave(co_out_name, anat_projection, imagej=True, resolution=(1 / dxy[0], 1 / dxy[1]),
                            metadata={'axes': 'YX', 'unit': 'um'})
             else:
-                co_aligned_movie = None
+                co_aligned_images = None
         finally:
             cm.stop_server(dview=dview)
-        return images, {"Motion Correction": mc_dict}, co_aligned_movie
+        return images, {"Motion Correction": mc_dict}, co_aligned_images
 
     def extract_components(self, images, fname) -> (cnmf.CNMF, cnmf.CNMF, dict):
         """

@@ -80,7 +80,7 @@ class Experiment2P:
         # use caiman to extract units and calcium data
         if eparser.is_dual_channel:
             print(f"This experiment has dual channel data. Ch{func_channel} is being processed as functional channel."
-                  f" Other, anatomy channel, is currently being ignored")
+                  f" Other, anatomy channel, is co-aligned.")
         data_files = eparser.ch_0_files if func_channel == 0 else eparser.ch_1_files
         if eparser.is_dual_channel:
             co_files = eparser.ch_1_files if func_channel == 0 else eparser.ch_0_files

@@ -99,9 +99,9 @@ class Experiment2P:
             images, params, co_images = cai_wrapper.motion_correct(ifile, cofile)
 
             exp.mcorr_dicts.append(params["Motion Correction"])
-            exp.projections.append(np.sum(images, 0))
+            exp.projections.append(np.mean(images, 0))
             if eparser.is_dual_channel:
-                exp.anat_projections.append(np.sum(co_images, 0))
+                exp.anat_projections.append(np.mean(co_images, 0))
                 pass
             print("Motion correction completed")
             cnm2, params = cai_wrapper.extract_components(images, ifile)[1:]

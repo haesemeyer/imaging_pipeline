@@ -105,14 +105,16 @@ class CaImAn:
         return {"quantileMin": self.detrend_dff_quantile_min,
                 "frames_window": int(self.detrend_dff_time_window/self.time_per_frame)}
 
-    def motion_correct(self, fname: str) -> (np.ndarray, dict):
+    def motion_correct(self, fname: str, co_fname: str) -> (np.ndarray, dict):
         """
         Uses caiman non-rigid motion correction to remove/reduce motion artefacts
         Note: ALways saves an intermediate mem-map representation in order C of the corrected 32-bit stack
         :param fname: The filename of the source file
+        :param co_fname: Filename of a stack that should be co-aligned or None
         :return:
             [0]: Corrected stack as a memmap
             [1]: Wrapped CaImAn parameter dictionary
+            [2]: Corrected co-stack as a memmap or None
         """
         cont_folder = path.dirname(fname)  # the containing folder
         stack_name = path.split(fname)[1]
@@ -121,6 +123,7 @@ class CaImAn:
             makedirs(save_dir)
             print("Created analysis directory", flush=True)
         out_name = save_dir + '/' + stack_name
+
         test_image = imread(fname, key=0)  # load first frame of stack to compute resolution
         assert test_image.shape[0] == test_image.shape[1]
         resolution = self.fov_um / test_image.shape[0]
@@ -183,9 +186,15 @@ class CaImAn:
                 anat_projection = anat_projection.astype(np.uint16)
                 imsave(out_name, anat_projection, imagej=True, resolution=(1 / dxy[0], 1 / dxy[1]),
                        metadata={'axes': 'YX', 'unit': 'um'})
+
+            # Repeat for the co-stack if present
+            if co_fname is not None:
+                co_aligned_movie = mc.apply_shifts_movie(co_fname)
+            else:
+                co_aligned_movie = None
         finally:
             cm.stop_server(dview=dview)
-        return images, {"Motion Correction": mc_dict}
+        return images, {"Motion Correction": mc_dict}, co_aligned_movie
 
     def extract_components(self, images, fname) -> (cnmf.CNMF, cnmf.CNMF, dict):
         """

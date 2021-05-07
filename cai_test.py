@@ -36,7 +36,7 @@ if __name__ == "__main__":
     info_file = ui_get_file(filetypes=[('Experiment info', '*.info')], multiple=False)
     if type(info_file) == list:
         info_file = info_file[0]
-    exp = Experiment2P().analyze_experiment(info_file, "Harvard 2P", "", {"indicator_decay_time": 3.0})
+    exp = Experiment2P().analyze_experiment(info_file, "OSU 2P", "", {"indicator_decay_time": 3.0})
     all_c = [a for b in exp.all_c for a in b]
     regressors = np.load("rh56_regs.npy")
     regressors = np.r_[regressors, regressors, regressors]

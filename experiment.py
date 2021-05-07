@@ -35,6 +35,7 @@ class Experiment2P:
         self.all_sizes = []  # for each experimental plane the size of each unit in pixels (not weighted)
         self.all_spatial = []  # for each experimental plane n_comp x 4 array <component-ix, weight, x-coord, y-coord>
         self.projections = []  # list of 32 bit plane projections after motion correction
+        self.anat_projections = []  # for dual-channel experiments, list of 32 bit plane projections of anatomy channel
         self.mcorr_dicts = []  # the motion correction parameters used on each plane
         self.cnmf_extract_dicts = []  # the cnmf source extraction parameters used on each plane
         self.cnmf_val_dicts = []  # the cnmf validation parameters used on each plane
@@ -81,15 +82,27 @@ class Experiment2P:
             print(f"This experiment has dual channel data. Ch{func_channel} is being processed as functional channel."
                   f" Other, anatomy channel, is currently being ignored")
         data_files = eparser.ch_0_files if func_channel == 0 else eparser.ch_1_files
+        if eparser.is_dual_channel:
+            co_files = eparser.ch_1_files if func_channel == 0 else eparser.ch_0_files
+        else:
+            co_files = None
         for i, ifl in enumerate(data_files):
             cai_params["time_per_frame"] = exp.info_data["frame_duration"]
             cai_params["fov_um"] = exp.scanner_data[i]["fov"]
             cai_wrapper = CaImAn(**cai_params)
             ifile = path.join(exp.original_path, ifl)
+            if eparser.is_dual_channel:
+                cofile = path.join(exp.original_path, co_files[i])
+            else:
+                cofile = None
             print(f"Now analyzing: {ifile}")
-            images, params = cai_wrapper.motion_correct(ifile)
+            images, params, co_images = cai_wrapper.motion_correct(ifile, cofile)
+
             exp.mcorr_dicts.append(params["Motion Correction"])
             exp.projections.append(np.sum(images, 0))
+            if eparser.is_dual_channel:
+                exp.anat_projections.append(np.sum(co_images, 0))
+                pass
             print("Motion correction completed")
             cnm2, params = cai_wrapper.extract_components(images, ifile)[1:]
             exp.cnmf_extract_dicts.append(params["CNMF"])
@@ -133,6 +146,7 @@ class Experiment2P:
                 exp.scanner_data.append(exp._load_dictionary("scanner_data", plane_group))
                 exp.tail_data.append(plane_group["tail_data"][()])
                 exp.projections.append(plane_group["projection"][()])
+                exp.anat_projections.append(plane_group["anat_projection"][()])
                 exp.all_c.append(plane_group["C"][()])
                 exp.all_dff.append(plane_group["dff"][()])
                 exp.all_centroids.append(plane_group["centroids"][()])
@@ -211,6 +225,8 @@ class Experiment2P:
                 self._save_dictionary(self.scanner_data[i], "scanner_data", plane_group)
                 plane_group.create_dataset("tail_data", data=self.tail_data[i], compression="gzip", compression_opts=5)
                 plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
+                                           compression_opts=5)
+                plane_group.create_dataset("anat_projection", data=self.anat_projections[i], compression="gzip",
                                            compression_opts=5)
                 plane_group.create_dataset("C", data=self.all_c[i], compression="gzip", compression_opts=5)
                 plane_group.create_dataset("dff", data=self.all_dff[i], compression="gzip", compression_opts=5)

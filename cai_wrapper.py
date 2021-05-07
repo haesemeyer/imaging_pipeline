@@ -124,6 +124,12 @@ class CaImAn:
             print("Created analysis directory", flush=True)
         out_name = save_dir + '/' + stack_name
 
+        if co_fname is not None:
+            co_stack_name = path.split(co_fname)[1]
+            co_out_name = save_dir + '/' + co_stack_name
+        else:
+            co_out_name = None
+
         test_image = imread(fname, key=0)  # load first frame of stack to compute resolution
         assert test_image.shape[0] == test_image.shape[1]
         resolution = self.fov_um / test_image.shape[0]
@@ -190,6 +196,17 @@ class CaImAn:
             # Repeat for the co-stack if present
             if co_fname is not None:
                 co_aligned_movie = mc.apply_shifts_movie(co_fname)
+                if self.save_projection:
+                    # save anatomical projection as 16bit tif
+                    anat_projection = np.sum(co_aligned_movie, 0)
+                    anat_projection -= anat_projection.min()
+                    anat_projection /= anat_projection.max()
+                    anat_projection *= (2 ** 16 - 1)
+                    anat_projection[anat_projection < 0] = 0
+                    anat_projection[anat_projection > (2 ** 16 - 1)] = (2 ** 16 - 1)
+                    anat_projection = anat_projection.astype(np.uint16)
+                    imsave(co_out_name, anat_projection, imagej=True, resolution=(1 / dxy[0], 1 / dxy[1]),
+                           metadata={'axes': 'YX', 'unit': 'um'})
             else:
                 co_aligned_movie = None
         finally:

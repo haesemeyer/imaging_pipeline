@@ -146,7 +146,8 @@ class Experiment2P:
                 exp.scanner_data.append(exp._load_dictionary("scanner_data", plane_group))
                 exp.tail_data.append(plane_group["tail_data"][()])
                 exp.projections.append(plane_group["projection"][()])
-                exp.anat_projections.append(plane_group["anat_projection"][()])
+                if "anat_projection" in plane_group:  # test if this experiment was dual-channel
+                    exp.anat_projections.append(plane_group["anat_projection"][()])
                 exp.all_c.append(plane_group["C"][()])
                 exp.all_dff.append(plane_group["dff"][()])
                 exp.all_centroids.append(plane_group["centroids"][()])
@@ -226,8 +227,9 @@ class Experiment2P:
                 plane_group.create_dataset("tail_data", data=self.tail_data[i], compression="gzip", compression_opts=5)
                 plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
                                            compression_opts=5)
-                plane_group.create_dataset("anat_projection", data=self.anat_projections[i], compression="gzip",
-                                           compression_opts=5)
+                if len(self.anat_projections) > 0:  # this is a dual-channel experiment
+                    plane_group.create_dataset("anat_projection", data=self.anat_projections[i], compression="gzip",
+                                               compression_opts=5)
                 plane_group.create_dataset("C", data=self.all_c[i], compression="gzip", compression_opts=5)
                 plane_group.create_dataset("dff", data=self.all_dff[i], compression="gzip", compression_opts=5)
                 plane_group.create_dataset("centroids", data=self.all_centroids[i], compression="gzip",

@@ -28,6 +28,14 @@ import seaborn as sns
 from peakfinder import peakdet
 
 
+class ExperimentException(Exception):
+    """
+    Exception to signal that invalid operation was performed on Experiment
+    """
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 def ui_get_file(filetypes=None, multiple=False):
     """
     Shows a file selection dialog and returns the path to the selected file(s)

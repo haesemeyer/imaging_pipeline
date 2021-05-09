@@ -11,7 +11,7 @@ import h5py
 from cai_wrapper import CaImAn
 from experiment_parser import ExperimentParser
 import numpy as np
-from utilities import get_component_centroids, get_component_coordinates
+from utilities import get_component_centroids, get_component_coordinates, ExperimentException
 from datetime import datetime
 from os import path
 import json
@@ -102,7 +102,6 @@ class Experiment2P:
             exp.projections.append(np.mean(images, 0))
             if eparser.is_dual_channel:
                 exp.anat_projections.append(np.mean(co_images, 0))
-                pass
             print("Motion correction completed")
             cnm2, params = cai_wrapper.extract_components(images, ifile)[1:]
             exp.cnmf_extract_dicts.append(params["CNMF"])
@@ -246,6 +245,34 @@ class Experiment2P:
         finally:
             dfile.close()
 
+    def avg_component_brightness(self, use_anat):
+        """
+        Computes the brightness of each identified component on the functional or anatomical channel
+        :param use_anat: If True returns the average brightness of each component on anatomy not functional channel
+        :return: n_planes long list of vectors with the time-average brightness of each identified component
+        """
+        if not self.populated:
+            raise ExperimentException("Experiment does not have data. Use Analyze or Load first.")
+        if use_anat and not self.is_dual_channel:
+            raise ValueError("Experiment does not have anatomy channel")
+        p = self.anat_projections if use_anat else self.projections
+        acb = []
+        for i in range(self.n_planes):
+            # <component-ix, weight, x-coord, y-coord>
+            n_components = int(np.max(self.all_spatial[i][:, 0]) + 1)  # component indices are 0-based
+            br = np.zeros(n_components, dtype=np.float32)
+            for j in range(n_components):
+                this_component = self.all_spatial[i][:, 0].astype(int) == j
+                spatial_x = self.all_spatial[i][this_component, 2].astype(int)
+                spatial_y = self.all_spatial[i][this_component, 3].astype(int)
+                br[j] = np.mean(p[i][spatial_y, spatial_x])
+            acb.append(br)
+        return acb
+
     @property
     def n_planes(self):
         return len(self.scanner_data)
+
+    @property
+    def is_dual_channel(self):
+        return len(self.anat_projections) > 0

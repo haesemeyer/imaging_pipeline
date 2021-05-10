@@ -37,12 +37,16 @@ if __name__ == "__main__":
     if type(info_file) == list:
         info_file = info_file[0]
     exp = Experiment2P().analyze_experiment(info_file, "OSU 2P", "", {"indicator_decay_time": 3.0})
+    acb_func = exp.avg_component_brightness(False)
+    acb_anat = exp.avg_component_brightness(True)
+
     all_c = [a for b in exp.all_c for a in b]
+    all_c = np.vstack(all_c)
     regressors = np.load("rh56_regs.npy")
     regressors = np.r_[regressors, regressors, regressors]
     r_times = np.arange(regressors.shape[0]) / 5
-    r_mat = np.full((len(all_c), regressors.shape[1]), np.nan)
-    interp_c = np.zeros((len(all_c), r_times.size))
+    r_mat = np.full((all_c.shape[0], regressors.shape[1]), np.nan)
+    interp_c = np.zeros((all_c.shape[0], r_times.size))
     for j, trace in enumerate(all_c):
         data_times = np.arange(trace.size) * exp.info_data["frame_duration"]
         i_trace = np.interp(r_times, data_times, trace)
@@ -54,6 +58,7 @@ if __name__ == "__main__":
 
     fig, (ax1, ax2) = pl.subplots(1, 2)
     sns.heatmap(r_mat, vmin=-1, vmax=1, center=0, ax=ax1)
+    r_mat_full = r_mat.copy()
     r_mat[r_mat < 0.6] = 0
     sns.heatmap(r_mat, vmin=0, vmax=1, ax=ax2)
     fig.tight_layout()
@@ -83,7 +88,11 @@ if __name__ == "__main__":
             break
         axes[i].imshow(exp.projections[i], vmax=np.percentile(exp.projections[i], 90))
         cents = exp.all_centroids[i]
-        axes[i].scatter(cents[:, 0], cents[:, 1], s=2, color='C1')
+        avg_brightness = acb_func[i]
+        likely_background = avg_brightness < 0.1
+        likely_foreground = np.logical_not(likely_background)
+        axes[i].scatter(cents[likely_foreground, 0], cents[likely_foreground, 1], s=2, color='C1')
+        axes[i].scatter(cents[likely_background, 0], cents[likely_background, 1], s=2, color='w')
     fig.tight_layout()
 
     exp.save_experiment(f"{path.join(exp.original_path, exp.experiment_name)}.hdf5")

@@ -11,7 +11,7 @@ import h5py
 from cai_wrapper import CaImAn
 from experiment_parser import ExperimentParser
 import numpy as np
-from utilities import get_component_centroids, get_component_coordinates, ExperimentException
+from utilities import get_component_centroids, get_component_coordinates, ExperimentException, TailData
 from datetime import datetime
 from os import path
 import json
@@ -27,8 +27,11 @@ class Experiment2P:
         self.original_path = ""  # the original path when the experiment was analyzed
         self.scope_name = ""  # the name assigned to the microscope for informational purposes
         self.comment = ""  # general comment associated with the experiment
+        self.tail_frame_rate = 0  # the frame-rate of the tail camera
         self.scanner_data = []  # for each experimental plane the associated scanner data (resolution, etc.)
         self.tail_data = []  # for each experimental plane the tail data if applicable
+        self.bout_data = []  # for each experimental plane, matrix of extracted swim bouts
+        self.tail_frame_times = []  # for each experimental plane, the scan relative time of each tail cam frame
         self.all_c = []  # for each experimental plane the inferred calcium of each extracted unit
         self.all_dff = []  # for each experimental plane the dF/F of each extracted unit
         self.all_centroids = []  # for each experimental plane the unit centroid coordinates as (x [col]/y [row]) pairs
@@ -43,7 +46,8 @@ class Experiment2P:
         self.populated = False  # indicates if class contains experimental data through analysis or loading
 
     @staticmethod
-    def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_params: dict, func_channel=0):
+    def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_params: dict, func_channel=0,
+                           tail_frame_rate=250):
         """
         Performs the intial analysis (file collection and segmentation) on the experiment identified by the info file
         :param info_file_name: The path and name of the info-file identifying the experiment
@@ -51,6 +55,7 @@ class Experiment2P:
         :param comment: Comment associated with the experiment
         :param cai_params: Dictionary of caiman parameters - fov and time-per-frame will be replaced with exp. data
         :param func_channel: The channel (either 0 or 1) containing the functional imaging data
+        :param tail_frame_rate: The frame-rate of the tail camera
         :return: Experiment object with all relevant data
         """
         if "indicator_decay_time" not in cai_params:
@@ -73,10 +78,16 @@ class Experiment2P:
             if eparser.has_tail_data:
                 for tf in eparser.tail_files:
                     exp.tail_data.append(np.genfromtxt(path.join(exp.original_path, tf), delimiter='\t'))
+                    # Since we only keep the bout calls, the time constant passed below is arbitrary
+                    td = TailData.load_tail_data(path.join(exp.original_path, tf), 3.0, tail_frame_rate,
+                                                 eparser.info_data["frame_duration"])
+                    exp.bout_data.append(td.bouts)
+                    exp.tail_frame_times.append(td.frame_time)
         except (IOError, OSError) as e:
             print(f".tail files are present but at least one file failed to load. Not attaching any tail data.")
             print(e)
             exp.tail_data = []
+            exp.bout_data = []
         # use caiman to extract units and calcium data
         if eparser.is_dual_channel:
             print(f"This experiment has dual channel data. Ch{func_channel} is being processed as functional channel."
@@ -137,6 +148,7 @@ class Experiment2P:
             exp.original_path = dfile["original_path"][()]
             exp.scope_name = dfile["scope_name"][()]
             exp.comment = dfile["comment"][()]
+            exp.tail_frame_rate = dfile["tail_frame_rate"][()]
             # load singular parameter dictionary
             exp.info_data = exp._load_dictionary("info_data", dfile)
             # load per-plane data
@@ -147,6 +159,10 @@ class Experiment2P:
                 exp.projections.append(plane_group["projection"][()])
                 if "anat_projection" in plane_group:  # test if this experiment was dual-channel
                     exp.anat_projections.append(plane_group["anat_projection"][()])
+                if "tail_data" in plane_group:  # test if this experiment had tail data (for all planes)
+                    exp.tail_data.append(plane_group["tail_data"][()])
+                    exp.bout_data.append(plane_group["bout_data"][()])
+                    exp.tail_frame_times.append(plane_group["tail_frame_time"])
                 exp.all_c.append(plane_group["C"][()])
                 exp.all_dff.append(plane_group["dff"][()])
                 exp.all_centroids.append(plane_group["centroids"][()])
@@ -217,13 +233,19 @@ class Experiment2P:
             dfile.create_dataset("scope_name", data=self.scope_name)
             dfile.create_dataset("comment", data=self.comment)
             dfile.create_dataset("n_planes", data=self.n_planes)
+            dfile.create_dataset("tail_frame_rate", data=self.tail_frame_rate)
             # save singular parameter dictionary
             self._save_dictionary(self.info_data, "info_data", dfile)
             # save per-plane data
             for i in range(self.n_planes):
                 plane_group = dfile.create_group(str(i))
                 self._save_dictionary(self.scanner_data[i], "scanner_data", plane_group)
-                plane_group.create_dataset("tail_data", data=self.tail_data[i], compression="gzip", compression_opts=5)
+                if len(self.tail_data) > 0:
+                    plane_group.create_dataset("tail_data", data=self.tail_data[i], compression="gzip",
+                                               compression_opts=5)
+                    plane_group.create_dataset("bout_data", data=self.bout_data[i], compression="gzip",
+                                               compression_opts=5)
+                    plane_group.create_dataset("tail_frame_time", data=self.tail_frame_times[i])
                 plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
                                            compression_opts=5)
                 if len(self.anat_projections) > 0:  # this is a dual-channel experiment

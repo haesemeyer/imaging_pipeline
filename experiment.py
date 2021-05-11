@@ -243,8 +243,13 @@ class Experiment2P:
                 if len(self.tail_data) > 0:
                     plane_group.create_dataset("tail_data", data=self.tail_data[i], compression="gzip",
                                                compression_opts=5)
-                    plane_group.create_dataset("bout_data", data=self.bout_data[i], compression="gzip",
-                                               compression_opts=5)
+                    if self.bout_data[i] is not None:
+                        plane_group.create_dataset("bout_data", data=self.bout_data[i], compression="gzip",
+                                                   compression_opts=5)
+                    else:
+                        # no bouts were found, save dummy array of one line of np.nan
+                        bd = np.full((1, 8), np.nan)
+                        plane_group.create_dataset("bout_data", data=bd, compression="gzip", compression_opts=5)
                     plane_group.create_dataset("tail_frame_time", data=self.tail_frame_times[i])
                 plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
                                            compression_opts=5)

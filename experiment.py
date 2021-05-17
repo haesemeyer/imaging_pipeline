@@ -39,6 +39,7 @@ class Experiment2P:
         self.all_spatial = []  # for each experimental plane n_comp x 4 array <component-ix, weight, x-coord, y-coord>
         self.projections = []  # list of 32 bit plane projections after motion correction
         self.anat_projections = []  # for dual-channel experiments, list of 32 bit plane projections of anatomy channel
+        self.func_stacks = []  # for each plane the realigned 8-bit functional stack
         self.mcorr_dicts = []  # the motion correction parameters used on each plane
         self.cnmf_extract_dicts = []  # the cnmf source extraction parameters used on each plane
         self.cnmf_val_dicts = []  # the cnmf validation parameters used on each plane
@@ -83,6 +84,7 @@ class Experiment2P:
                                                  eparser.info_data["frame_duration"])
                     exp.bout_data.append(td.bouts)
                     exp.tail_frame_times.append(td.frame_time)
+                    exp.tail_frame_rate = td.frame_rate
         except (IOError, OSError) as e:
             print(f".tail files are present but at least one file failed to load. Not attaching any tail data.")
             print(e)
@@ -111,6 +113,11 @@ class Experiment2P:
 
             exp.mcorr_dicts.append(params["Motion Correction"])
             exp.projections.append(np.mean(images, 0))
+            stack = np.array(images)
+            stack -= np.min(stack)
+            stack[stack > 255] = 255
+            stack = stack.astype(np.uint8)
+            exp.func_stacks.append(stack)
             if eparser.is_dual_channel:
                 exp.anat_projections.append(np.mean(co_images, 0))
             print("Motion correction completed")
@@ -157,6 +164,8 @@ class Experiment2P:
                 exp.scanner_data.append(exp._load_dictionary("scanner_data", plane_group))
                 exp.tail_data.append(plane_group["tail_data"][()])
                 exp.projections.append(plane_group["projection"][()])
+                if "func_stack" in plane_group:
+                    exp.func_stacks.append(plane_group["func_stack"][()])
                 if "anat_projection" in plane_group:  # test if this experiment was dual-channel
                     exp.anat_projections.append(plane_group["anat_projection"][()])
                 if "tail_data" in plane_group:  # test if this experiment had tail data (for all planes)
@@ -252,6 +261,8 @@ class Experiment2P:
                         plane_group.create_dataset("bout_data", data=bd, compression="gzip", compression_opts=5)
                     plane_group.create_dataset("tail_frame_time", data=self.tail_frame_times[i])
                 plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
+                                           compression_opts=5)
+                plane_group.create_dataset("func_stack", data=self.func_stacks[i], compression="gzip",
                                            compression_opts=5)
                 if len(self.anat_projections) > 0:  # this is a dual-channel experiment
                     plane_group.create_dataset("anat_projection", data=self.anat_projections[i], compression="gzip",

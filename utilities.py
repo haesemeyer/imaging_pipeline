@@ -359,7 +359,17 @@ class TailData:
             self.boutFrames = []
         self.ca_kernel = TailData.ca_kernel(ca_timeconstant, frame_rate)
         self.ca_timeconstant = ca_timeconstant
-        self.frame_rate = frame_rate
+        # try to compute frame-rate from timestamps in the tail-data if they are present
+        # use heuristics to determine if the 4th column (index 3) contains timestamp data
+        putative_ts = file_data[:, 3]
+        if np.all(np.diff(putative_ts) > 0) and np.mean(putative_ts) > 1e9:
+            frame_time_ms = np.median(np.diff(putative_ts)) / 1_000_000  # timestamp in ns
+            print(f"Found timestamp information in tail file. Median time between frames is {int(frame_time_ms)} ms")
+            self.frame_rate = int(1000 / frame_time_ms)
+            print(f"Set tail camera frame-rate to {self.frame_rate} Hz")
+        else:
+            print("Did not find timestamp information in tail file.")
+            self.frame_rate = frame_rate
         # compute tail velocities based on 10-window filtered cumulative angle trace
         fca = lfilter(np.ones(10)/10, 1, self.cumAngles)
         self.velocity = np.hstack((0, np.diff(fca)))

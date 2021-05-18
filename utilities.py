@@ -327,7 +327,7 @@ class TailData:
             file_data: Matrix loaded from tailfile
             ca_timeconstant: Timeconstant of calcium indicator used during experiments
             frame_rate: The tail camera acquisition framerate
-            scan_frame_length: For more accurate alignment the time it took to acquire each 2P scan frame
+            scan_frame_length: For more accurate alignment the time it took to acquire each 2P scan frame in seconds
         """
         self.scanning = file_data[:, 0] == 1
         self.scan_frame = file_data[:, 1].astype(int)
@@ -364,12 +364,14 @@ class TailData:
         putative_ts = file_data[:, 3]
         if np.all(np.diff(putative_ts) > 0) and np.mean(putative_ts) > 1e9:
             frame_time_ms = np.median(np.diff(putative_ts)) / 1_000_000  # timestamp in ns
-            print(f"Found timestamp information in tail file. Median time between frames is {int(frame_time_ms)} ms")
+            print(f"Found timestamp information in tail file. Median time between frames is "
+                  f"{np.round(frame_time_ms, 2)}ms")
             self.frame_rate = int(1000 / frame_time_ms)
             print(f"Set tail camera frame-rate to {self.frame_rate} Hz")
         else:
             print("Did not find timestamp information in tail file.")
             self.frame_rate = frame_rate
+            putative_ts = None
         # compute tail velocities based on 10-window filtered cumulative angle trace
         fca = lfilter(np.ones(10)/10, 1, self.cumAngles)
         self.velocity = np.hstack((0, np.diff(fca)))
@@ -383,23 +385,24 @@ class TailData:
         first_frame = np.min(frames[self.scan_frame == 1]) - avg_count.astype(int)
         # remove overhang from frame 0 call
         self.scan_frame[:first_frame] = -1
-        if scan_frame_length is not None:
-            # build frame-time tied to the scan-frame clock in case camera acquisition does not follow the
-            # intended frame rate: For the camera frame which is in the middle of a given scan-frame set
-            # its time to the middle time of scan acquisition of that frame. Then interpolate times in between
-            ix_key_frame = []
-            key_frame_times = []
-            # add very first frame and its approximated time purely based on camera time
-            ix_key_frame.append(0)
-            key_frame_times.append((frames[0] - first_frame) / frame_rate)
+        if scan_frame_length is not None and putative_ts is not None:
+            # We will use the camera timestamp to assign sequential frame-times
+            # To transform the  timing information into a time relative to the scan-frame
+            # times we extract the likely scan time for each camera frame that is in the middle
+            # of each scan frame. Then we pick the median suggested start time based on these key-
+            # frame times
+            timestamp_first_frame = putative_ts[0]
+            start_times = []
             for i in range(self.scan_frame.max()):
+                # compute index of the camera frame in the middle of the current scan frame
                 ix_key = int(np.mean(frames[self.scan_frame == i]))
+                # based on how long it takes to scan a frame, compute the approximate scan time at the key-frame
                 key_time = scan_frame_length / 2 + scan_frame_length * i
-                ix_key_frame.append(ix_key)
-                key_frame_times.append(key_time)
-            # use linear interpolation to create times for each frame
-            self.frame_time = np.interp(frames, np.array(ix_key_frame), np.array(key_frame_times), right=np.nan)
-            # self.frameTime = self.frameTime[np.logical_not(np.isnan(self.frameTime))]
+                # compute the relative scan time of the first camera frame based on the key time
+                camera_delta = (putative_ts[ix_key] - timestamp_first_frame) / 1e9
+                start_times.append(key_time - camera_delta)
+            likely_start_time = np.median(start_times)
+            self.frame_time = (putative_ts - timestamp_first_frame) / 1e9 + likely_start_time
         else:
             frames -= first_frame
             self.frame_time = (frames / frame_rate).astype(np.float32)

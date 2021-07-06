@@ -149,6 +149,8 @@ class ExperimentParser:
         # Obtain all files that belong to the experiment in question
         exp_files = [f for f in all_files if self.experiment_name in f]
         # Seperately collect different file types
+        self.laser_files = [f for f in exp_files if f.split('.')[-1] == 'laser']
+        self.laser_files.sort(key=self._file_sort_key)
         self.tail_files = [f for f in exp_files if f.split('.')[-1] == 'tail']
         self.tail_files.sort(key=self._file_sort_key)
         self.scanner_fixed_files = [f for f in exp_files if ("ImageScannerFixed.txt" in f and "_stableZ_" not in f)]
@@ -159,8 +161,10 @@ class ExperimentParser:
         self.ch_1_files.sort(key=self._file_sort_key)
         n_ch_1 = len(self.ch_1_files)
         n_tail = len(self.tail_files)
+        n_laser = len(self.laser_files)
         self.is_dual_channel = n_ch_1 > 0
         self.has_tail_data = n_tail > 0
+        self.has_laser_data = n_laser > 0
         # check consistency of experimental files
         n_scan = len(self.scanner_fixed_files)
         n_ch_0 = len(self.ch_0_files)
@@ -171,6 +175,8 @@ class ExperimentParser:
             raise ValueError(f"Ch0 has {n_ch_0} tif stacks but Ch1 has {n_ch_1} tif stacks")
         if self.has_tail_data and n_ch_0 != n_tail:
             raise ValueError(f"Ch0 has {n_ch_0} tif stacks but there are {n_tail} taildata files")
+        if self.has_laser_data and n_laser != n_ch_0:
+            raise ValueError(f"Ch0 has {n_ch_0} tif stacks but there are {n_laser} laser data files")
         self.scanner_data = [ImageScannerFixed(path.join(self.original_path, scfile)).info
                              for scfile in self.scanner_fixed_files]
 

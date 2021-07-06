@@ -30,6 +30,7 @@ class Experiment2P:
         self.tail_frame_rate = 0  # the frame-rate of the tail camera
         self.scanner_data = []  # for each experimental plane the associated scanner data (resolution, etc.)
         self.tail_data = []  # for each experimental plane the tail data if applicable
+        self.laser_data = []  # for each experimental plane 20Hz vector of laser command voltages if applicable
         self.bout_data = []  # for each experimental plane, matrix of extracted swim bouts
         self.tail_frame_times = []  # for each experimental plane, the scan relative time of each tail cam frame
         self.all_c = []  # for each experimental plane the inferred calcium of each extracted unit
@@ -90,6 +91,15 @@ class Experiment2P:
             print(e)
             exp.tail_data = []
             exp.bout_data = []
+        # collect data in laser files if applicable
+        try:
+            if eparser.has_laser_data:
+                for lf in eparser.laser_files:
+                    exp.laser_data.append(np.genfromtxt(path.join(exp.original_path, lf)))
+        except (IOError, OSError) as e:
+            print(f".laser files are present but at least one file failed to load. Not attaching any laser data.")
+            print(e)
+            exp.laser_data = []
         # use caiman to extract units and calcium data
         if eparser.is_dual_channel:
             print(f"This experiment has dual channel data. Ch{func_channel} is being processed as functional channel."
@@ -172,6 +182,8 @@ class Experiment2P:
                     exp.tail_data.append(plane_group["tail_data"][()])
                     exp.bout_data.append(plane_group["bout_data"][()])
                     exp.tail_frame_times.append(plane_group["tail_frame_time"])
+                if "laser_data" in plane_group:  # test if this experiment had laser data
+                    exp.laser_data.append(plane_group["laser_data"][()])
                 exp.all_c.append(plane_group["C"][()])
                 exp.all_dff.append(plane_group["dff"][()])
                 exp.all_centroids.append(plane_group["centroids"][()])
@@ -260,6 +272,9 @@ class Experiment2P:
                         bd = np.full((1, 8), np.nan)
                         plane_group.create_dataset("bout_data", data=bd, compression="gzip", compression_opts=5)
                     plane_group.create_dataset("tail_frame_time", data=self.tail_frame_times[i])
+                if len(self.laser_data) > 0:
+                    plane_group.create_dataset("laser_data", data=self.laser_data[i], compression="gzip",
+                                               compression_opts=5)
                 plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
                                            compression_opts=5)
                 plane_group.create_dataset("func_stack", data=self.func_stacks[i], compression="gzip",

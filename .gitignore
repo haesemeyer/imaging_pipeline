@@ -19,3 +19,4 @@ test*
 *.hdf5
 model_data/
 *.dframe
+dist/

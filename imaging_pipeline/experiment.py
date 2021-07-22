@@ -18,6 +18,7 @@ import json
 import logging
 from sklearn.exceptions import ConvergenceWarning
 import matplotlib.pyplot as pl
+import sys
 
 
 class Experiment2P:
@@ -342,26 +343,15 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
     return exp
 
 
-if __name__ == "__main__":
-    decay_str = input("Please enter the calcium indicator decay time in seconds:")
-    try:
-        decay_time = float(decay_str)
-    except ValueError:
-        print(f"{decay_str} is not a valid number")
-        raise
+def main(ca_decay: float, exp_info_file: str, func_channel: int):
+    if exp_info_file == "":
+        info_file = ui_get_file(filetypes=[('Experiment info', '*.info')], multiple=False)
+        if type(info_file) == list:
+            info_file = info_file[0]
+    else:
+        info_file = exp_info_file
 
-    # Shut down some noise clogging the interpreter
-    logging.basicConfig(level=logging.ERROR)
-    warnings.simplefilter(action='ignore', category=FutureWarning)
-    warnings.simplefilter(action='ignore', category=DeprecationWarning)
-    warnings.simplefilter(action='once', category=ConvergenceWarning)
-
-    __spec__ = "ModuleSpec(name='builtins', loader=<class '_frozen_importlib.BuiltinImporter'>)"
-
-    info_file = ui_get_file(filetypes=[('Experiment info', '*.info')], multiple=False)
-    if type(info_file) == list:
-        info_file = info_file[0]
-    exp = analyze_experiment(info_file, "OSU 2P", "", {"indicator_decay_time": decay_time})
+    exp = analyze_experiment(info_file, "OSU 2P", "", {"indicator_decay_time": ca_decay}, func_channel=func_channel)
     acb_func = exp.avg_component_brightness(False)
 
     fig, axes = pl.subplots(ncols=int(np.sqrt(exp.n_planes))+1, nrows=int(np.sqrt(exp.n_planes)))
@@ -379,3 +369,60 @@ if __name__ == "__main__":
     fig.tight_layout()
 
     exp.save_experiment(f"{path.join(exp.original_path, exp.experiment_name)}.hdf5")
+
+
+if __name__ == "__main__":
+
+    if_name = ""
+    decay_time = -1
+    acq_channel = -1
+
+    def parse(arg):
+        global if_name
+        global decay_time
+        global acq_channel
+        if arg.upper() == "CH0":
+            acq_channel = 0
+            return
+        if arg.upper() == "CH1":
+            acq_channel = 1
+            return
+        if path.exists(arg) and ".info" in arg:
+            if_name = arg
+            return
+        try:
+            dt = float(arg)
+        except ValueError:
+            return
+        decay_time = dt
+
+    if len(sys.argv) > 1:
+        for a in sys.argv[1:]:
+            parse(a)
+
+    if decay_time < 0:
+        decay_str = input("Please enter the calcium indicator decay time in seconds:")
+        try:
+            decay_time = float(decay_str)
+        except ValueError:
+            print(f"{decay_str} is not a valid number")
+            raise
+
+    if acq_channel < 0:
+        acq_str = input("Please indicate functional channel [Ch0/Ch1]")
+        if acq_str.upper() == "CH0":
+            acq_channel = 0
+        elif acq_str.upper() == "CH1":
+            acq_channel = 1
+        else:
+            raise ValueError(f"{acq_str} is not a recognized channel indicator. Has to be Ch0 or Ch1")
+
+    # Shut down some noise clogging the interpreter
+    logging.basicConfig(level=logging.ERROR)
+    warnings.simplefilter(action='ignore', category=FutureWarning)
+    warnings.simplefilter(action='ignore', category=DeprecationWarning)
+    warnings.simplefilter(action='once', category=ConvergenceWarning)
+
+    __spec__ = "ModuleSpec(name='builtins', loader=<class '_frozen_importlib.BuiltinImporter'>)"
+
+    main(decay_time, if_name, acq_channel)

@@ -190,8 +190,10 @@ class ExperimentParser:
         plane_start = name.find("_Z_") + 3
         plane_end = name[plane_start:].find("_")
         if plane_end == -1:
-            # tail file
+            # tail file or laser file
             plane_end = name[plane_start:].find(".tail")
+            if plane_end == -1:
+                plane_end = name[plane_start:].find(".laser")
         if plane_end == -1:
             raise ValueError("Can't find plane identification in file name")
         return int(name[plane_start:plane_start + plane_end])

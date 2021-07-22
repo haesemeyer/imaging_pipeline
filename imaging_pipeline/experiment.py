@@ -5,7 +5,7 @@
 """
 Class wrapper of experiments with support of serialization to/from HDF5 files
 """
-
+import warnings
 
 import h5py
 from cai_wrapper import CaImAn
@@ -44,7 +44,7 @@ class Experiment2P:
         self.mcorr_dicts = []  # the motion correction parameters used on each plane
         self.cnmf_extract_dicts = []  # the cnmf source extraction parameters used on each plane
         self.cnmf_val_dicts = []  # the cnmf validation parameters used on each plane
-        self.version = "unstable"  # version ID for future-proofing
+        self.version = "1"  # version ID for future-proofing
         self.populated = False  # indicates if class contains experimental data through analysis or loading
 
     @staticmethod
@@ -159,6 +159,14 @@ class Experiment2P:
         exp = Experiment2P()
         with h5py.File(file_name, 'r') as dfile:
             exp.version = dfile["version"][()]  # in future allows for version specific loading
+            try:
+                if exp.version == "unstable":
+                    warnings.warn("Experiment file was created with development version of analysis code. Trying to "
+                                  "load as version 1")
+                elif int(exp.version) > 1:
+                    raise IOError(f"File version {exp.version} is larger than highest recognized version '1'")
+            except ValueError:
+                raise IOError(f"File version {exp.version} not recognized")
             # load general experiment data
             n_planes = dfile["n_planes"][()]  # inferrred property of class but used here for loading plane data
             exp.experiment_name = dfile["experiment_name"][()]

@@ -8,10 +8,9 @@ Script for testing caiman - cai_demo.py implementation with slight adjustments
 
 
 import numpy as np
-from utilities import ui_get_file, trial_average
+from utilities import ui_get_file
 import matplotlib.pyplot as pl
-import seaborn as sns
-from experiment import Experiment2P
+from experiment import analyze_experiment
 from os import path
 import logging
 import warnings
@@ -36,7 +35,7 @@ if __name__ == "__main__":
     info_file = ui_get_file(filetypes=[('Experiment info', '*.info')], multiple=False)
     if type(info_file) == list:
         info_file = info_file[0]
-    exp = Experiment2P().analyze_experiment(info_file, "OSU 2P", "", {"indicator_decay_time": 3.0})
+    exp = analyze_experiment(info_file, "OSU 2P", "", {"indicator_decay_time": 3.0})
     acb_func = exp.avg_component_brightness(False)
 
     fig, axes = pl.subplots(ncols=int(np.sqrt(exp.n_planes))+1, nrows=int(np.sqrt(exp.n_planes)))

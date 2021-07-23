@@ -25,7 +25,11 @@ class Experiment2P:
     """
     Represents a 2-photon imaging experiment on which cells have been segmented
     """
-    def __init__(self):
+    def __init__(self, lazy_load_filename=""):
+        """
+        Creates a new Experiment2P object
+        :param lazy_load_filename: If given, will attach this instance to an existing hdf5 store at the filename
+        """
         self.info_data = {}  # data from the experiment's info data
         self.experiment_name = ""  # name of the experiment
         self.original_path = ""  # the original path when the experiment was analyzed
@@ -33,23 +37,175 @@ class Experiment2P:
         self.comment = ""  # general comment associated with the experiment
         self.tail_frame_rate = 0  # the frame-rate of the tail camera
         self.scanner_data = []  # for each experimental plane the associated scanner data (resolution, etc.)
-        self.tail_data = []  # for each experimental plane the tail data if applicable
-        self.laser_data = []  # for each experimental plane 20Hz vector of laser command voltages if applicable
+        self.__tail_data = []  # for each experimental plane the tail data if applicable
+        self.__laser_data = []  # for each experimental plane 20Hz vector of laser command voltages if applicable
         self.bout_data = []  # for each experimental plane, matrix of extracted swim bouts
         self.tail_frame_times = []  # for each experimental plane, the scan relative time of each tail cam frame
-        self.all_c = []  # for each experimental plane the inferred calcium of each extracted unit
-        self.all_dff = []  # for each experimental plane the dF/F of each extracted unit
+        self.__all_c = []  # for each experimental plane the inferred calcium of each extracted unit
+        self.__all_dff = []  # for each experimental plane the dF/F of each extracted unit
         self.all_centroids = []  # for each experimental plane the unit centroid coordinates as (x [col]/y [row]) pairs
         self.all_sizes = []  # for each experimental plane the size of each unit in pixels (not weighted)
         self.all_spatial = []  # for each experimental plane n_comp x 4 array <component-ix, weight, x-coord, y-coord>
         self.projections = []  # list of 32 bit plane projections after motion correction
         self.anat_projections = []  # for dual-channel experiments, list of 32 bit plane projections of anatomy channel
-        self.func_stacks = []  # for each plane the realigned 8-bit functional stack
+        self.__func_stacks = []  # for each plane the realigned 8-bit functional stack
         self.mcorr_dicts = []  # the motion correction parameters used on each plane
         self.cnmf_extract_dicts = []  # the cnmf source extraction parameters used on each plane
         self.cnmf_val_dicts = []  # the cnmf validation parameters used on each plane
         self.version = "1"  # version ID for future-proofing
         self.populated = False  # indicates if class contains experimental data through analysis or loading
+        self.lazy = False  # indicates that we have lazy-loaded and attached to hdf5 file
+        self.__hdf5_store = None  # type: h5py.File
+        if lazy_load_filename != "" and not path.exists(lazy_load_filename):
+            raise ValueError(f"The file {lazy_load_filename} does not exist. Cannot attach to store.")
+        if lazy_load_filename != "":
+            self.__lazy_load(lazy_load_filename)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.__hdf5_store is not None:
+            self.__hdf5_store.close()
+            self.__hdf5_store = None
+            self.lazy = False
+
+    def __lazy_load(self, lazy_load_filename: str):
+        """
+        Performs "lazy loading" loading some properties and making others available through an hdf5 store backend
+        :param lazy_load_filename: The name of the experiment hdf5 file
+        """
+        self.__hdf5_store = h5py.File(lazy_load_filename, 'r')
+        self.version = self.__hdf5_store["version"][()]
+        try:
+            if self.version == b"unstable" or self.version == "unstable":
+                warnings.warn("Experiment file was created with development version of analysis code. Trying to "
+                              "load as version 1")
+            elif int(self.version) > 1:
+                self.__hdf5_store.close()
+                self.__hdf5_store = None
+                raise IOError(f"File version {self.version} is larger than highest recognized version '1'")
+        except ValueError:
+            self.__hdf5_store.close()
+            self.__hdf5_store = None
+            raise IOError(f"File version {self.version} not recognized")
+        # load general experiment data
+        n_planes = self.__hdf5_store["n_planes"][()]
+        self.experiment_name = self.__hdf5_store["experiment_name"][()]
+        self.original_path = self.__hdf5_store["original_path"][()]
+        self.scope_name = self.__hdf5_store["scope_name"][()]
+        self.comment = self.__hdf5_store["comment"][()]
+        self.tail_frame_rate = self.__hdf5_store["tail_frame_rate"][()]
+        # load singular parameter dictionary
+        self.info_data = self._load_dictionary("info_data", self.__hdf5_store)
+        # load some per-plane data leave larger objects unloaded
+        for i in range(n_planes):
+            plane_group = self.__hdf5_store[str(i)]
+            self.scanner_data.append(self._load_dictionary("scanner_data", plane_group))
+            self.projections.append(plane_group["projection"][()])
+            if "anat_projection" in plane_group:  # test if this experiment was dual-channel
+                self.anat_projections.append(plane_group["anat_projection"][()])
+            if "tail_data" in plane_group:  # test if this experiment had tail data (for all planes)
+                self.bout_data.append(plane_group["bout_data"][()])
+                self.tail_frame_times.append(plane_group["tail_frame_time"][()])
+            self.all_centroids.append(plane_group["centroids"][()])
+            self.all_sizes.append(plane_group["sizes"][()])
+            self.all_spatial.append(plane_group["spatial"][()])
+            ps = plane_group["mcorr_dict"][()]
+            self.mcorr_dicts.append(json.loads(ps))
+            ps = plane_group["cnmf_extract_dict"][()]
+            self.cnmf_extract_dicts.append(json.loads(ps))
+            ps = plane_group["cnmf_val_dict"][()]
+            self.cnmf_val_dicts.append(json.loads(ps))
+        self.lazy = True
+
+    @property
+    def tail_data(self):
+        if not self.lazy:
+            return self.__tail_data
+        else:
+            if self.__hdf5_store is None:
+                raise ExperimentException("Hdf5 store not properly attached")
+            rval = []
+            for i in range(self.n_planes):
+                plane_group = self.__hdf5_store[str(i)]
+                if "tail_data" in plane_group:  # test if this experiment had tail data (for all planes)
+                    rval.append(plane_group["tail_data"][()])
+            return rval
+
+    @tail_data.setter
+    def tail_data(self, value):
+        self.__tail_data = value
+
+    @property
+    def laser_data(self):
+        if not self.lazy:
+            return self.__laser_data
+        else:
+            if self.__hdf5_store is None:
+                raise ExperimentException("Hdf5 store not properly attached")
+            rval = []
+            for i in range(self.n_planes):
+                plane_group = self.__hdf5_store[str(i)]
+                if "laser_data" in plane_group:  # test if this experiment had laser data
+                    rval.append(plane_group["laser_data"][()])
+            return rval
+
+    @laser_data.setter
+    def laser_data(self, value):
+        self.__laser_data = value
+
+    @property
+    def all_c(self):
+        if not self.lazy:
+            return self.__all_c
+        else:
+            if self.__hdf5_store is None:
+                raise ExperimentException("Hdf5 store not properly attached")
+            rval = []
+            for i in range(self.n_planes):
+                plane_group = self.__hdf5_store[str(i)]
+                rval.append(plane_group["C"][()])
+            return rval
+
+    @all_c.setter
+    def all_c(self, value):
+        self.__all_c = value
+
+    @property
+    def all_dff(self):
+        if not self.lazy:
+            return self.__all_dff
+        else:
+            if self.__hdf5_store is None:
+                raise ExperimentException("Hdf5 store not properly attached")
+            rval = []
+            for i in range(self.n_planes):
+                plane_group = self.__hdf5_store[str(i)]
+                rval.append(plane_group["dff"][()])
+            return rval
+
+    @all_dff.setter
+    def all_dff(self, value):
+        self.all_dff = value
+
+    @property
+    def func_stacks(self):
+        if not self.lazy:
+            return self.__func_stacks
+        else:
+            if self.__hdf5_store is None:
+                raise ExperimentException("Hdf5 store not properly attached")
+            rval = []
+            for i in range(self.n_planes):
+                plane_group = self.__hdf5_store[str(i)]
+                if "func_stack" in plane_group:
+                    rval.append(plane_group["func_stack"][()])
+            return rval
+
+    @func_stacks.setter
+    def func_stacks(self, value):
+        self.func_stacks = value
 
     @staticmethod
     def load_experiment(file_name: str):

@@ -11,7 +11,7 @@ import h5py
 from cai_wrapper import CaImAn
 from experiment_parser import ExperimentParser
 import numpy as np
-from utilities import get_component_centroids, get_component_coordinates, ExperimentException, TailData, ui_get_file
+from utilities import get_component_centroids, get_component_coordinates, TailData, ui_get_file
 from datetime import datetime
 from os import path
 import json
@@ -19,6 +19,14 @@ import logging
 from sklearn.exceptions import ConvergenceWarning
 import matplotlib.pyplot as pl
 import sys
+
+
+class ExperimentException(Exception):
+    """
+    Exception to signal that invalid operation was performed on Experiment
+    """
+    def __init__(self, message: str):
+        super().__init__(message)
 
 
 class Experiment2P:

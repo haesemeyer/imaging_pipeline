@@ -91,7 +91,7 @@ class Experiment2P:
                 if "tail_data" in plane_group:  # test if this experiment had tail data (for all planes)
                     exp.tail_data.append(plane_group["tail_data"][()])
                     exp.bout_data.append(plane_group["bout_data"][()])
-                    exp.tail_frame_times.append(plane_group["tail_frame_time"])
+                    exp.tail_frame_times.append(plane_group["tail_frame_time"][()])
                 if "laser_data" in plane_group:  # test if this experiment had laser data
                     exp.laser_data.append(plane_group["laser_data"][()])
                 exp.all_c.append(plane_group["C"][()])

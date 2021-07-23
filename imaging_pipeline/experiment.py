@@ -62,7 +62,7 @@ class Experiment2P:
         with h5py.File(file_name, 'r') as dfile:
             exp.version = dfile["version"][()]  # in future allows for version specific loading
             try:
-                if exp.version == "unstable":
+                if exp.version == b"unstable" or exp.version == "unstable":
                     warnings.warn("Experiment file was created with development version of analysis code. Trying to "
                                   "load as version 1")
                 elif int(exp.version) > 1:
@@ -137,8 +137,12 @@ class Experiment2P:
         g = file[dict_name]
         for k in g:
             if "finish_time" in k or "start_time" in k:
-                # need to decode string into datetime object
-                date_time_string = g[k][()]
+                # need to decode byte-string into datetime object
+                try:
+                    date_time_string = g[k][()].decode('UTF-8')  # convert bye string to string
+                except AttributeError:
+                    # it is already a unicode string
+                    date_time_string = g[k][()]
                 d[k] = datetime.strptime(date_time_string, "%m/%d/%Y %I:%M:%S %p")
             else:
                 d[k] = g[k][()]

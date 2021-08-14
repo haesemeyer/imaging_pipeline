@@ -9,7 +9,7 @@ Module to parse experimental file structure extracting relevant acquisition info
 
 from datetime import datetime
 from os import path, listdir
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple, Optional
 
 
 class LineParser:
@@ -22,7 +22,7 @@ class LineParser:
         self.info: Dict[str, Any] = {"full_text": "\n".join(self.all_contents), "original_file": file_name}
 
     @staticmethod
-    def _parse(line: str) -> (str, Any):
+    def _parse(line: str) -> Tuple[Optional[str], Any]:
         raise NotImplementedError()
 
 
@@ -45,7 +45,7 @@ class InfoFile(LineParser):
             self.info["stable_z"] = False
 
     @staticmethod
-    def _parse(line: str) -> (str, Any):
+    def _parse(line: str) -> Tuple[Optional[str], Any]:
         """
         Processes a line of text and if it contains experimental parameters
         returns a corresponding key and value or None, None otherwise
@@ -93,7 +93,7 @@ class ImageScannerFixed(LineParser):
                 self.info[k] = v
 
     @staticmethod
-    def _parse(line: str) -> (str, Any):
+    def _parse(line: str) -> Tuple[Optional[str], Any]:
         """
         Processes a line of text and if it contains experimental parameters
         returns a corresponding key and value or None, None otherwise

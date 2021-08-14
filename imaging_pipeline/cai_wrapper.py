@@ -184,8 +184,8 @@ class CaImAn:
                 # save anatomical projection as 16bit tif
                 anat_projection = images.copy()
                 anat_projection = np.sum(anat_projection, 0)
-                anat_projection -= anat_projection.min()
-                anat_projection /= anat_projection.max()
+                anat_projection -= np.min(anat_projection)
+                anat_projection /= np.max(anat_projection)
                 anat_projection *= (2 ** 16 - 1)
                 anat_projection[anat_projection < 0] = 0
                 anat_projection[anat_projection > (2 ** 16 - 1)] = (2 ** 16 - 1)
@@ -199,8 +199,8 @@ class CaImAn:
                 if self.save_projection:
                     # save anatomical projection as 16bit tif
                     anat_projection = np.sum(co_aligned_images, 0)
-                    anat_projection -= anat_projection.min()
-                    anat_projection /= anat_projection.max()
+                    anat_projection -= np.min(anat_projection)
+                    anat_projection /= np.max(anat_projection)
                     anat_projection *= (2 ** 16 - 1)
                     anat_projection[anat_projection < 0] = 0
                     anat_projection[anat_projection > (2 ** 16 - 1)] = (2 ** 16 - 1)

@@ -123,7 +123,7 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
     return exp
 
 
-def main(ca_decay: float, exp_info_file: str, func_channel: int):
+def main(ca_decay: float, exp_info_file: str, func_channel: int) -> None:
     if exp_info_file == "":
         info_file = ui_get_file(filetypes=[('Experiment info', '*.info')], multiple=False)
         if type(info_file) == list:

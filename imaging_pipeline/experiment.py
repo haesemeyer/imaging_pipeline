@@ -12,6 +12,7 @@ import numpy as np
 from datetime import datetime
 from os import path
 import json
+from typing import Dict, List, Optional, Any
 
 
 class ExperimentException(Exception):
@@ -26,37 +27,42 @@ class Experiment2P:
     """
     Represents a 2-photon imaging experiment on which cells have been segmented
     """
-    def __init__(self, lazy_load_filename=""):
+    def __init__(self, lazy_load_filename: str = ""):
         """
         Creates a new Experiment2P object
         :param lazy_load_filename: If given, will attach this instance to an existing hdf5 store at the filename
         """
-        self.info_data = {}  # data from the experiment's info data
-        self.experiment_name = ""  # name of the experiment
-        self.original_path = ""  # the original path when the experiment was analyzed
-        self.scope_name = ""  # the name assigned to the microscope for informational purposes
-        self.comment = ""  # general comment associated with the experiment
-        self.tail_frame_rate = 0  # the frame-rate of the tail camera
-        self.scanner_data = []  # for each experimental plane the associated scanner data (resolution, etc.)
-        self.__tail_data = []  # for each experimental plane the tail data if applicable
-        self.__laser_data = []  # for each experimental plane 20Hz vector of laser command voltages if applicable
-        self.bout_data = []  # for each experimental plane, matrix of extracted swim bouts
-        self.tail_frame_times = []  # for each experimental plane, the scan relative time of each tail cam frame
-        self.__all_c = []  # for each experimental plane the inferred calcium of each extracted unit
-        self.__all_dff = []  # for each experimental plane the dF/F of each extracted unit
-        self.all_centroids = []  # for each experimental plane the unit centroid coordinates as (x [col]/y [row]) pairs
-        self.all_sizes = []  # for each experimental plane the size of each unit in pixels (not weighted)
-        self.all_spatial = []  # for each experimental plane n_comp x 4 array <component-ix, weight, x-coord, y-coord>
-        self.projections = []  # list of 32 bit plane projections after motion correction
-        self.anat_projections = []  # for dual-channel experiments, list of 32 bit plane projections of anatomy channel
-        self.__func_stacks = []  # for each plane the realigned 8-bit functional stack
-        self.mcorr_dicts = []  # the motion correction parameters used on each plane
-        self.cnmf_extract_dicts = []  # the cnmf source extraction parameters used on each plane
-        self.cnmf_val_dicts = []  # the cnmf validation parameters used on each plane
-        self.version = "1"  # version ID for future-proofing
-        self.populated = False  # indicates if class contains experimental data through analysis or loading
-        self.lazy = False  # indicates that we have lazy-loaded and attached to hdf5 file
-        self.__hdf5_store = None  # type: h5py.File
+        self.info_data: Dict[str, Any] = {}  # data from the experiment's info data
+        self.experiment_name: str = ""  # name of the experiment
+        self.original_path: str = ""  # the original path when the experiment was analyzed
+        self.scope_name: str = ""  # the name assigned to the microscope for informational purposes
+        self.comment: str = ""  # general comment associated with the experiment
+        self.tail_frame_rate: int = 0  # the frame-rate of the tail camera
+        self.scanner_data: List[Dict] = []  # for each experimental plane the associated scanner data (resolution, etc.)
+        self.__tail_data: List[np.ndarray] = []  # for each experimental plane the tail data if applicable
+        self.__laser_data: List[np.ndarray] = []  # per plane 20Hz vector of laser command voltages if applicable
+        self.bout_data: List[np.ndarray] = []  # for each experimental plane, matrix of extracted swim bouts
+        self.tail_frame_times: List[np.ndarray] = []  # for each plane, the scan relative time of each tail cam frame
+        self.__all_c: List[np.ndarray] = []  # for each experimental plane the inferred calcium of each extracted unit
+        self.__all_dff: List[np.ndarray] = []  # for each experimental plane the dF/F of each extracted unit
+        # for each experimental plane the unit centroid coordinates as (x [col]/y [row]) pairs
+        self.all_centroids: List[np.ndarray] = []
+        # for each experimental plane the size of each unit in pixels (not weighted)
+        self.all_sizes: List[np.ndarray] = []
+        # for each experimental plane n_comp x 4 array <component-ix, weight, x-coord, y-coord>
+        self.all_spatial: List[np.ndarray] = []
+        # list of 32 bit plane projections after motion correction
+        self.projections: List[np.ndarray] = []
+        # for dual-channel experiments, list of 32 bit plane projections of anatomy channel
+        self.anat_projections: List[np.ndarray] = []
+        self.__func_stacks: List[np.ndarray] = []  # for each plane the realigned 8-bit functional stack
+        self.mcorr_dicts: List[Dict] = []  # the motion correction parameters used on each plane
+        self.cnmf_extract_dicts: List[Dict] = []  # the cnmf source extraction parameters used on each plane
+        self.cnmf_val_dicts: List[Dict] = []  # the cnmf validation parameters used on each plane
+        self.version: str = "1"  # version ID for future-proofing
+        self.populated: bool = False  # indicates if class contains experimental data through analysis or loading
+        self.lazy: bool = False  # indicates that we have lazy-loaded and attached to hdf5 file
+        self.__hdf5_store: Optional[h5py.File] = None
         if lazy_load_filename != "" and not path.exists(lazy_load_filename):
             raise ValueError(f"The file {lazy_load_filename} does not exist. Cannot attach to store.")
         if lazy_load_filename != "":
@@ -71,7 +77,7 @@ class Experiment2P:
             self.__hdf5_store = None
             self.lazy = False
 
-    def __lazy_load(self, lazy_load_filename: str):
+    def __lazy_load(self, lazy_load_filename: str) -> None:
         """
         Performs "lazy loading" loading some properties and making others available through an hdf5 store backend
         :param lazy_load_filename: The name of the experiment hdf5 file
@@ -121,7 +127,7 @@ class Experiment2P:
         self.lazy = True
 
     @property
-    def tail_data(self):
+    def tail_data(self) -> List[np.ndarray]:
         if not self.lazy:
             return self.__tail_data
         else:
@@ -135,11 +141,11 @@ class Experiment2P:
             return rval
 
     @tail_data.setter
-    def tail_data(self, value):
+    def tail_data(self, value: List[np.ndarray]):
         self.__tail_data = value
 
     @property
-    def laser_data(self):
+    def laser_data(self) -> List[np.ndarray]:
         if not self.lazy:
             return self.__laser_data
         else:
@@ -153,11 +159,11 @@ class Experiment2P:
             return rval
 
     @laser_data.setter
-    def laser_data(self, value):
+    def laser_data(self, value: np.ndarray):
         self.__laser_data = value
 
     @property
-    def all_c(self):
+    def all_c(self) -> List[np.ndarray]:
         if not self.lazy:
             return self.__all_c
         else:
@@ -170,11 +176,11 @@ class Experiment2P:
             return rval
 
     @all_c.setter
-    def all_c(self, value):
+    def all_c(self, value: List[np.ndarray]):
         self.__all_c = value
 
     @property
-    def all_dff(self):
+    def all_dff(self) -> List[np.ndarray]:
         if not self.lazy:
             return self.__all_dff
         else:
@@ -187,11 +193,11 @@ class Experiment2P:
             return rval
 
     @all_dff.setter
-    def all_dff(self, value):
+    def all_dff(self, value: List[np.ndarray]):
         self.all_dff = value
 
     @property
-    def func_stacks(self):
+    def func_stacks(self) -> List[np.ndarray]:
         if not self.lazy:
             return self.__func_stacks
         else:
@@ -205,7 +211,7 @@ class Experiment2P:
             return rval
 
     @func_stacks.setter
-    def func_stacks(self, value):
+    def func_stacks(self, value: List[np.ndarray]):
         self.func_stacks = value
 
     @staticmethod
@@ -266,7 +272,7 @@ class Experiment2P:
         return exp
 
     @staticmethod
-    def _save_dictionary(d: dict, dict_name: str, file: h5py.File):
+    def _save_dictionary(d: dict, dict_name: str, file: h5py.File) -> None:
         """
         Saves a dictionary to hdf5 file. Note: Does not work for general dictionaries!
         :param d: The dictionary to save
@@ -283,7 +289,7 @@ class Experiment2P:
                 g.create_dataset(k, data=d[k])
 
     @staticmethod
-    def _load_dictionary(dict_name: str, file: h5py.File):
+    def _load_dictionary(dict_name: str, file: h5py.File) -> Dict:
         """
         Loads a experiment related dictionary from file
         :param dict_name: The name of the dictionary
@@ -305,7 +311,7 @@ class Experiment2P:
                 d[k] = g[k][()]
         return d
 
-    def save_experiment(self, file_name: str, ovr_if_exists=False):
+    def save_experiment(self, file_name: str, ovr_if_exists=False) -> None:
         """
         Saves the experiment to the indicated file in hdf5 format
         :param file_name: The name of the file to save to
@@ -369,7 +375,7 @@ class Experiment2P:
         finally:
             dfile.close()
 
-    def avg_component_brightness(self, use_anat):
+    def avg_component_brightness(self, use_anat: bool) -> List[np.ndarray]:
         """
         Computes the brightness of each identified component on the functional or anatomical channel
         :param use_anat: If True returns the average brightness of each component on anatomy not functional channel
@@ -394,9 +400,9 @@ class Experiment2P:
         return acb
 
     @property
-    def n_planes(self):
+    def n_planes(self) -> int:
         return len(self.scanner_data)
 
     @property
-    def is_dual_channel(self):
+    def is_dual_channel(self) -> bool:
         return len(self.anat_projections) > 0

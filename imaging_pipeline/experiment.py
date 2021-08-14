@@ -375,7 +375,7 @@ class Experiment2P:
         :param use_anat: If True returns the average brightness of each component on anatomy not functional channel
         :return: n_planes long list of vectors with the time-average brightness of each identified component
         """
-        if not self.populated:
+        if not self.populated and not self.lazy:
             raise ExperimentException("Experiment does not have data. Use Analyze or Load first.")
         if use_anat and not self.is_dual_channel:
             raise ValueError("Experiment does not have anatomy channel")

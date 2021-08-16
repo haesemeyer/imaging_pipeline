@@ -26,6 +26,7 @@ from scipy.signal.signaltools import lfilter
 import matplotlib.pyplot as pl
 import seaborn as sns
 from peakfinder import peakdet
+from typing import Tuple, List, Union, Optional
 
 
 def ui_get_file(filetypes=None, multiple=False):
@@ -39,7 +40,7 @@ def ui_get_file(filetypes=None, multiple=False):
     return tkFileDialog.askopenfilename(**options)
 
 
-def get_component_coordinates(matrix_a, im_dim_0: int, im_dim_1: int):
+def get_component_coordinates(matrix_a, im_dim_0: int, im_dim_1: int) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """
     For each component in the sparse cnmf.estimates.A matrix, returns the x-y pixel coordinates
     of constituent pixels
@@ -63,7 +64,7 @@ def get_component_coordinates(matrix_a, im_dim_0: int, im_dim_1: int):
     return coordinates, weights
 
 
-def get_component_centroids(matrix_a, im_dim_0: int, im_dim_1: int):
+def get_component_centroids(matrix_a, im_dim_0: int, im_dim_1: int) -> np.ndarray:
     """
     For each component in the sparse cnmf.estimates.A matrix, returns the x-y coordinates
     of the weighted centroid
@@ -80,7 +81,8 @@ def get_component_centroids(matrix_a, im_dim_0: int, im_dim_1: int):
     return centroids
 
 
-def transform_pixel_coordinates(coords, z_plane, dxy_um, dz_um,):
+def transform_pixel_coordinates(coords: np.ndarray, z_plane: float, dxy_um: Union[float, Tuple[float, float]],
+                                dz_um: float) -> np.ndarray:
     """
     Transforms pixel based 2-D coordinates into um based 3-D coordinates
     :param coords: n-components x 2 2D pixel coordinates
@@ -124,7 +126,7 @@ def trial_average(activity_matrix: np.ndarray, n_trials: int, sum_it=False, rem_
         return np.nanmean(m_t, 1) if rem_nan else np.mean(m_t, 1)
 
 
-def test_cmtk_install():
+def test_cmtk_install() -> int:
     """
     Tries to determine if CMTK is installed and whether individual binaries are directly accessible
     or are accessible via the cmtk script call
@@ -168,7 +170,7 @@ def cmtk_transform_3d_coordinates(coords: np.ndarray, transform_file: str) -> np
     return coords_out
 
 
-def filtfilt(x, window_len):
+def filtfilt(x: np.ndarray, window_len: int):
     """
     Performs zero-phase digital filtering with a boxcar filter. Data is first
     passed through the filter in the forward and then backward direction. This
@@ -195,7 +197,7 @@ def filtfilt(x, window_len):
 
 
 @njit(numba.float64[:](numba.float64[:], numba.int32))
-def comp_vigor(cum_angle, winlen=10):
+def comp_vigor(cum_angle: np.ndarray, winlen=10) -> np.ndarray:
     """
     Computes the swim vigor based on a cumulative angle trace
     as the windowed standard deviation of the cumAngles
@@ -207,7 +209,8 @@ def comp_vigor(cum_angle, winlen=10):
     return vig
 
 
-def detect_tail_bouts(cum_angles, vigor, threshold=10, min_frames=20, frame_rate=250):
+def detect_tail_bouts(cum_angles: np.ndarray, vigor: np.ndarray, threshold=10, min_frames=20,
+                      frame_rate=250) -> Optional[np.ndarray]:
     """
     Detects swim-bouts in a tail cumulative angle trace or vigor trace (sliding sdev of cum_angle) and collects their
     characteristics.

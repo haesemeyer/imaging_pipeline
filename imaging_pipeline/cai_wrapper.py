@@ -14,6 +14,7 @@ import caiman as cm
 from caiman.motion_correction import MotionCorrect
 from caiman.source_extraction.cnmf import cnmf as cnmf
 from caiman.source_extraction.cnmf import params as params
+from typing import Tuple, Optional
 
 
 class CaImAn:
@@ -105,7 +106,7 @@ class CaImAn:
         return {"quantileMin": self.detrend_dff_quantile_min,
                 "frames_window": int(self.detrend_dff_time_window/self.time_per_frame)}
 
-    def motion_correct(self, fname: str, co_fname: str) -> (np.ndarray, dict):
+    def motion_correct(self, fname: str, co_fname: str) -> Tuple[np.ndarray, dict, Optional[np.ndarray]]:
         """
         Uses caiman non-rigid motion correction to remove/reduce motion artefacts
         Note: ALways saves an intermediate mem-map representation in order C of the corrected 32-bit stack
@@ -213,7 +214,7 @@ class CaImAn:
             cm.stop_server(dview=dview)
         return images, {"Motion Correction": mc_dict}, co_aligned_images
 
-    def extract_components(self, images, fname) -> (cnmf.CNMF, cnmf.CNMF, dict):
+    def extract_components(self, images, fname) -> Tuple[cnmf.CNMF, cnmf.CNMF, dict]:
         """
         Uses constrained NNMF to extract spatial and temporal components, performs deconvolution and validates
         extracted components

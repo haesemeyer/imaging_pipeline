@@ -9,6 +9,7 @@ Module to parse experimental file structure extracting relevant acquisition info
 
 from datetime import datetime
 from os import path, listdir
+from typing import Any, Dict, List, Tuple, Optional
 
 
 class LineParser:
@@ -18,10 +19,10 @@ class LineParser:
         info_file = open(file_name, 'rt')
         self.all_contents = info_file.readlines()
         info_file.close()
-        self.info = {"full_text": "\n".join(self.all_contents), "original_file": file_name}
+        self.info: Dict[str, Any] = {"full_text": "\n".join(self.all_contents), "original_file": file_name}
 
     @staticmethod
-    def _parse(line: str) -> (str, object):
+    def _parse(line: str) -> Tuple[Optional[str], Any]:
         raise NotImplementedError()
 
 
@@ -44,7 +45,7 @@ class InfoFile(LineParser):
             self.info["stable_z"] = False
 
     @staticmethod
-    def _parse(line: str) -> (str, object):
+    def _parse(line: str) -> Tuple[Optional[str], Any]:
         """
         Processes a line of text and if it contains experimental parameters
         returns a corresponding key and value or None, None otherwise
@@ -92,7 +93,7 @@ class ImageScannerFixed(LineParser):
                 self.info[k] = v
 
     @staticmethod
-    def _parse(line: str) -> (str, object):
+    def _parse(line: str) -> Tuple[Optional[str], Any]:
         """
         Processes a line of text and if it contains experimental parameters
         returns a corresponding key and value or None, None otherwise
@@ -139,32 +140,35 @@ class ExperimentParser:
         :param info_file_name: Path and name of .info file identifying the experiment
         """
         # TODO: Add parameter that indicates ventro-dorsal acquisition and reverses file sort order in that case
-        self.info_data = InfoFile(info_file_name).info
+        self.info_data: Dict[str, Any] = InfoFile(info_file_name).info
         # Extract experiment path and experiment name
         exp_path = path.dirname(info_file_name)
-        self.experiment_name = '.'.join(path.split(info_file_name)[1].split('.')[:-1])
-        self.original_path = exp_path
+        self.experiment_name: str = '.'.join(path.split(info_file_name)[1].split('.')[:-1])
+        self.original_path: str = exp_path
         # Get all file objects in the experiment's directory
         all_files = [f for f in listdir(exp_path) if path.isfile(path.join(exp_path, f))]
         # Obtain all files that belong to the experiment in question
         exp_files = [f for f in all_files if self.experiment_name in f]
         # Seperately collect different file types
-        self.laser_files = [f for f in exp_files if f.split('.')[-1] == 'laser']
+        self.laser_files: List[str] = [f for f in exp_files if f.split('.')[-1] == 'laser']
         self.laser_files.sort(key=self._file_sort_key)
-        self.tail_files = [f for f in exp_files if f.split('.')[-1] == 'tail']
+        self.tail_files: List[str] = [f for f in exp_files if f.split('.')[-1] == 'tail']
         self.tail_files.sort(key=self._file_sort_key)
-        self.scanner_fixed_files = [f for f in exp_files if ("ImageScannerFixed.txt" in f and "_stableZ_" not in f)]
+        self.scanner_fixed_files: List[str] = [f for f in exp_files if ("ImageScannerFixed.txt" in f
+                                                                        and "_stableZ_" not in f)]
         self.scanner_fixed_files.sort(key=self._file_sort_key)
-        self.ch_0_files = [f for f in exp_files if ("_0.tif" in f and "_stableZ_" not in f and "Z_0.tif" not in f)]
+        self.ch_0_files: List[str] = [f for f in exp_files if ("_0.tif" in f and "_stableZ_"
+                                                               not in f and "Z_0.tif" not in f)]
         self.ch_0_files.sort(key=self._file_sort_key)
-        self.ch_1_files = [f for f in exp_files if ("_1.tif" in f and "_stableZ_" not in f and "Z_1.tif" not in f)]
+        self.ch_1_files: List[str] = [f for f in exp_files if ("_1.tif" in f and "_stableZ_" not in f
+                                                               and "Z_1.tif" not in f)]
         self.ch_1_files.sort(key=self._file_sort_key)
         n_ch_1 = len(self.ch_1_files)
         n_tail = len(self.tail_files)
         n_laser = len(self.laser_files)
-        self.is_dual_channel = n_ch_1 > 0
-        self.has_tail_data = n_tail > 0
-        self.has_laser_data = n_laser > 0
+        self.is_dual_channel: bool = n_ch_1 > 0
+        self.has_tail_data: bool = n_tail > 0
+        self.has_laser_data: bool = n_laser > 0
         # check consistency of experimental files
         n_scan = len(self.scanner_fixed_files)
         n_ch_0 = len(self.ch_0_files)
@@ -177,11 +181,11 @@ class ExperimentParser:
             raise ValueError(f"Ch0 has {n_ch_0} tif stacks but there are {n_tail} taildata files")
         if self.has_laser_data and n_laser != n_ch_0:
             raise ValueError(f"Ch0 has {n_ch_0} tif stacks but there are {n_laser} laser data files")
-        self.scanner_data = [ImageScannerFixed(path.join(self.original_path, scfile)).info
-                             for scfile in self.scanner_fixed_files]
+        self.scanner_data: List[Dict[str, Any]] = [ImageScannerFixed(path.join(self.original_path, scfile)).info
+                                                   for scfile in self.scanner_fixed_files]
 
     @staticmethod
-    def _file_sort_key(name: str):
+    def _file_sort_key(name: str) -> int:
         """
         Finds the imaging plane part of a filename for proper sort order of file names
         :param name: The name of the file

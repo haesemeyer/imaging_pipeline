@@ -10,15 +10,46 @@ from experiment import Experiment2P
 from utilities import get_component_centroids, get_component_coordinates, TailData
 from experiment_parser import ExperimentParser
 from cai_wrapper import CaImAn
+import os
 from os import path
 import numpy as np
 
 import logging
 from sklearn.exceptions import ConvergenceWarning
 import matplotlib.pyplot as pl
-import sys
 from utilities import ui_get_file
 import warnings
+
+import argparse
+from typing import Any
+
+
+class CheckArgs(argparse.Action):
+    """
+    Check our command line arguments for validity
+    """
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs not allowed")
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values: Any, option_string=None):
+        if self.dest == 'file':
+            if not os.path.exists(values):
+                raise argparse.ArgumentError(self, "Experiment .info file does not exist")
+            if ".info" not in values:
+                raise argparse.ArgumentError(self, "Provided file is not a .info file")
+            setattr(namespace, self.dest, values)
+        elif self.dest == 'decay_time':
+            if values <= 0:
+                raise argparse.ArgumentError(self, "Decay time must be larger than 0")
+            setattr(namespace, self.dest, values)
+        elif self.dest == 'func_channel':
+            if values != 0 and values != 1:
+                raise argparse.ArgumentError(self, "Functional channel identifier has to be 0 or 1")
+            setattr(namespace, self.dest, values)
+        else:
+            raise Exception("Parser was asked to check unknown argument")
 
 
 def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_params: dict, func_channel=0,
@@ -134,7 +165,7 @@ def main(ca_decay: float, exp_info_file: str, func_channel: int) -> None:
     exp = analyze_experiment(info_file, "OSU 2P", "", {"indicator_decay_time": ca_decay}, func_channel=func_channel)
     acb_func = exp.avg_component_brightness(False)
 
-    fig, axes = pl.subplots(ncols=int(np.sqrt(exp.n_planes))+1, nrows=int(np.sqrt(exp.n_planes)))
+    fig, axes = pl.subplots(ncols=int(np.sqrt(exp.n_planes)) + 1, nrows=int(np.sqrt(exp.n_planes)))
     axes = axes.ravel()
     for i in range(exp.n_planes):
         if i >= axes.size:
@@ -153,49 +184,21 @@ def main(ca_decay: float, exp_info_file: str, func_channel: int) -> None:
 
 if __name__ == "__main__":
 
-    if_name = ""
-    decay_time = -1
-    acq_channel = -1
+    a_parser = argparse.ArgumentParser(prog="imaging_pipeline.analysis",
+                                       description="Aggregates all experiment information into one hdf5 file and"
+                                                   " extracts calcium signals and corresponding units using CAIMAN."
+                                                   " Also performs rudimentary swim bout identification.")
+    a_parser.add_argument("decay_time", help="Estimated calcium indicator decay time", type=float, action=CheckArgs)
+    a_parser.add_argument("-f", "--file", help="File name and path of experiment's .info file", type=str, default="",
+                          action=CheckArgs)
+    a_parser.add_argument("-fc", "--func_channel", help="The index of the functional channel", type=int,
+                          action=CheckArgs, default=0)
 
-    def parse(arg):
-        global if_name
-        global decay_time
-        global acq_channel
-        if arg.upper() == "CH0":
-            acq_channel = 0
-            return
-        if arg.upper() == "CH1":
-            acq_channel = 1
-            return
-        if path.exists(arg) and ".info" in arg:
-            if_name = arg
-            return
-        try:
-            dt = float(arg)
-        except ValueError:
-            return
-        decay_time = dt
+    args = a_parser.parse_args()
 
-    if len(sys.argv) > 1:
-        for a in sys.argv[1:]:
-            parse(a)
-
-    if decay_time < 0:
-        decay_str = input("Please enter the calcium indicator decay time in seconds:")
-        try:
-            decay_time = float(decay_str)
-        except ValueError:
-            print(f"{decay_str} is not a valid number")
-            raise
-
-    if acq_channel < 0:
-        acq_str = input("Please indicate functional channel [Ch0/Ch1]")
-        if acq_str.upper() == "CH0":
-            acq_channel = 0
-        elif acq_str.upper() == "CH1":
-            acq_channel = 1
-        else:
-            raise ValueError(f"{acq_str} is not a recognized channel indicator. Has to be Ch0 or Ch1")
+    if_name = args.file
+    decay_time = args.decay_time
+    acq_channel = args.func_channel
 
     # Shut down some noise clogging the interpreter
     logging.basicConfig(level=logging.ERROR)

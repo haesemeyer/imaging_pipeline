@@ -132,6 +132,7 @@ def main(ca_decay: float, exp_info_file: str, func_channel: int):
         info_file = exp_info_file
 
     exp = analyze_experiment(info_file, "OSU 2P", "", {"indicator_decay_time": ca_decay}, func_channel=func_channel)
+    exp.save_experiment(f"{path.join(exp.original_path, exp.experiment_name)}.hdf5")
     acb_func = exp.avg_component_brightness(False)
 
     fig, axes = pl.subplots(ncols=int(np.sqrt(exp.n_planes))+1, nrows=int(np.sqrt(exp.n_planes)))
@@ -147,8 +148,7 @@ def main(ca_decay: float, exp_info_file: str, func_channel: int):
         axes[i].scatter(cents[likely_foreground, 0], cents[likely_foreground, 1], s=2, color='C1')
         axes[i].scatter(cents[likely_background, 0], cents[likely_background, 1], s=2, color='w')
     fig.tight_layout()
-
-    exp.save_experiment(f"{path.join(exp.original_path, exp.experiment_name)}.hdf5")
+    fig.savefig(f"{path.join(exp.original_path, exp.experiment_name)}_extraction.png", dpi=600)
 
 
 if __name__ == "__main__":

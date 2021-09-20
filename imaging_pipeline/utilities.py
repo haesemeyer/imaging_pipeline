@@ -358,9 +358,11 @@ class TailData:
         # use heuristics to determine if the 4th column (index 3) contains timestamp data
         putative_ts = file_data[:, 3]
         if np.all(np.diff(putative_ts) > 0) and np.mean(putative_ts) > 1e9:
-            frame_time_ms = np.median(np.diff(putative_ts)) / 1_000_000  # timestamp in ns
+            all_frame_times_ms = np.diff(putative_ts) / 1_000_000  # timestamp in ns
+            frame_time_ms = np.median(all_frame_times_ms)
             print(f"Found timestamp information in tail file. Median time between frames is "
                   f"{np.round(frame_time_ms, 2)}ms")
+            print(f"99th percentile time between frames is {np.round(np.percentile(all_frame_times_ms, 99), 2)}ms")
             self.frame_rate = int(1000 / frame_time_ms)
             print(f"Set tail camera frame-rate to {self.frame_rate} Hz")
         else:
@@ -389,6 +391,8 @@ class TailData:
             timestamp_first_frame = putative_ts[0]
             start_times = []
             for i in range(self.scan_frame.max()):
+                if np.sum(self.scan_frame == i) < 1:
+                    continue
                 # compute index of the camera frame in the middle of the current scan frame
                 ix_key = int(np.mean(frames[self.scan_frame == i]))
                 # based on how long it takes to scan a frame, compute the approximate scan time at the key-frame

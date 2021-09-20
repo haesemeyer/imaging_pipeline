@@ -160,8 +160,8 @@ class ExperimentParser:
         self.ch_0_files: List[str] = [f for f in exp_files if ("_0.tif" in f and "_stableZ_"
                                                                not in f and "Z_0.tif" not in f)]
         self.ch_0_files.sort(key=self._file_sort_key)
-        self.ch_1_files: List[str] = [f for f in exp_files if ("_1.tif" in f and "_stableZ_" not in f
-                                                               and "Z_1.tif" not in f)]
+        self.ch_1_files: List[str] = [f for f in exp_files if ("_1.tif" in f and "_stableZ_" not in f and "tailImage"
+                                                               not in f and "Z_1.tif" not in f)]
         self.ch_1_files.sort(key=self._file_sort_key)
         n_ch_1 = len(self.ch_1_files)
         n_tail = len(self.tail_files)

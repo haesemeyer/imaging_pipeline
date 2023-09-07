@@ -139,7 +139,6 @@ class ExperimentParser:
         Create new experiment parser
         :param info_file_name: Path and name of .info file identifying the experiment
         """
-        # TODO: Add parameter that indicates ventro-dorsal acquisition and reverses file sort order in that case
         self.info_data: Dict[str, Any] = InfoFile(info_file_name).info
         # Extract experiment path and experiment name
         exp_path = path.dirname(info_file_name)
@@ -149,9 +148,14 @@ class ExperimentParser:
         all_files = [f for f in listdir(exp_path) if path.isfile(path.join(exp_path, f))]
         # Obtain all files that belong to the experiment in question
         exp_files = [f for f in all_files if self.experiment_name in f]
-        # Seperately collect different file types
+        # Seperately collect different file types - note we collect everything here - later code has to decide
+        # which of these files are relevant
         self.laser_files: List[str] = [f for f in exp_files if f.split('.')[-1] == 'laser']
         self.laser_files.sort(key=self._file_sort_key)
+        self.fish_temp_files = [f for f in exp_files if f.split('.')[-1] == "temp"]
+        self.fish_temp_files.sort(key=self._file_sort_key)
+        self.control_temp_files = [f for f in exp_files if f.split('.')[-1] == "c_temp"]
+        self.control_temp_files.sort(key=self._file_sort_key)
         self.tail_files: List[str] = [f for f in exp_files if f.split('.')[-1] == 'tail']
         self.tail_files.sort(key=self._file_sort_key)
         self.scanner_fixed_files: List[str] = [f for f in exp_files if ("ImageScannerFixed.txt" in f
@@ -166,9 +170,13 @@ class ExperimentParser:
         n_ch_1 = len(self.ch_1_files)
         n_tail = len(self.tail_files)
         n_laser = len(self.laser_files)
+        n_ftemp = len(self.fish_temp_files)
+        n_ctemp = len(self.control_temp_files)
         self.is_dual_channel: bool = n_ch_1 > 0
         self.has_tail_data: bool = n_tail > 0
         self.has_laser_data: bool = n_laser > 0
+        self.has_fish_temp = n_ftemp > 0
+        self.has_control_temp = n_ctemp > 0
         # check consistency of experimental files
         n_scan = len(self.scanner_fixed_files)
         n_ch_0 = len(self.ch_0_files)
@@ -181,6 +189,10 @@ class ExperimentParser:
             raise ValueError(f"Ch0 has {n_ch_0} tif stacks but there are {n_tail} taildata files")
         if self.has_laser_data and n_laser != n_ch_0:
             raise ValueError(f"Ch0 has {n_ch_0} tif stacks but there are {n_laser} laser data files")
+        if self.has_fish_temp and n_ftemp != n_ch_0:
+            raise ValueError(f"Ch0 has {n_ch_0} tif stacks but there are {n_ftemp} fish temperature files")
+        if self.has_control_temp and n_ctemp != n_ch_0:
+            raise ValueError(f"Ch0 has {n_ch_0} tif stacks but there are {n_ctemp} control temperature files")
         self.scanner_data: List[Dict[str, Any]] = [ImageScannerFixed(path.join(self.original_path, scfile)).info
                                                    for scfile in self.scanner_fixed_files]
 

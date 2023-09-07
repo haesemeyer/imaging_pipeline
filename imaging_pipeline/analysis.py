@@ -82,14 +82,16 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
     # collect data in tail files if applicable
     try:
         if eparser.has_tail_data:
+            tdata = []
             for tf in eparser.tail_files:
-                exp.tail_data.append(np.genfromtxt(path.join(exp.original_path, tf), delimiter='\t'))
+                tdata.append(np.genfromtxt(path.join(exp.original_path, tf), delimiter='\t'))
                 # Since we only keep the bout calls, the time constant passed below is arbitrary
                 td = TailData.load_tail_data(path.join(exp.original_path, tf), 3.0, tail_frame_rate,
                                              eparser.info_data["frame_duration"])
                 exp.bout_data.append(td.bouts)
                 exp.tail_frame_times.append(td.frame_time)
                 exp.tail_frame_rate = td.frame_rate
+            exp.tail_data = tdata
     except (IOError, OSError) as e:
         print(f".tail files are present but at least one file failed to load. Not attaching any tail data.")
         print(e)
@@ -98,12 +100,13 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
     # collect data in laser files if applicable
     try:
         if eparser.has_laser_data:
+            ldata = []
             for lf in eparser.laser_files:
-                exp.laser_data.append(np.genfromtxt(path.join(exp.original_path, lf)))
+                ldata.append(np.genfromtxt(path.join(exp.original_path, lf)))
+            exp.laser_data = ldata
     except (IOError, OSError) as e:
         print(f".laser files are present but at least one file failed to load. Not attaching any laser data.")
         print(e)
-        exp.laser_data = []
     # use caiman to extract units and calcium data
     if eparser.is_dual_channel:
         print(f"This experiment has dual channel data. Ch{func_channel} is being processed as functional channel."
@@ -113,6 +116,9 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
         co_files = eparser.ch_1_files if func_channel == 0 else eparser.ch_0_files
     else:
         co_files = None
+    func_stacks = []
+    all_c = []
+    all_dff = []
     for i, ifl in enumerate(data_files):
         cai_params["time_per_frame"] = exp.info_data["frame_duration"]
         cai_params["fov_um"] = exp.scanner_data[i]["fov"]
@@ -131,7 +137,7 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
         stack -= np.min(stack)
         stack[stack > 255] = 255
         stack = stack.astype(np.uint8)
-        exp.func_stacks.append(stack)
+        func_stacks.append(stack)
         if eparser.is_dual_channel:
             exp.anat_projections.append(np.mean(co_images, 0))
         print("Motion correction completed")
@@ -139,8 +145,8 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
         exp.cnmf_extract_dicts.append(params["CNMF"])
         exp.cnmf_val_dicts.append(params["Validation"])
         print("Source extraction completed")
-        exp.all_c.append(cnm2.estimates.C.copy())
-        exp.all_dff.append(cnm2.estimates.F_dff.copy())
+        all_c.append(cnm2.estimates.C.copy())
+        all_dff.append(cnm2.estimates.F_dff.copy())
         exp.all_centroids.append(get_component_centroids(cnm2.estimates.A, images.shape[1], images.shape[2]))
         coords, weights = get_component_coordinates(cnm2.estimates.A, images.shape[1], images.shape[2])
         exp.all_sizes.append(np.array([w.size for w in weights]))
@@ -150,6 +156,9 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
             spat = np.c_[ix, comp_weights[:, None], comp_coords]
             spatial_footprints.append(spat)
         exp.all_spatial.append(np.vstack(spatial_footprints))
+    exp.func_stacks = func_stacks
+    exp.all_c = all_c
+    exp.all_dff = all_dff
     exp.populated = True
     return exp
 

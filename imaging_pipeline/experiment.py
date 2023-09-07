@@ -12,7 +12,7 @@ import numpy as np
 from datetime import datetime
 from os import path
 import json
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 
 class ExperimentException(Exception):
@@ -23,14 +23,68 @@ class ExperimentException(Exception):
         super().__init__(message)
 
 
+class LazyLoadObject:
+    """Class to represent a lazy-loaded object including current status"""
+
+    def __init__(self, backend: Optional[h5py.File], storage_name: str, lazy_loaded=True):
+        """
+        Creates a new LazyLoadObject
+        :param backend: The hdf5 backend store for this data
+        :param storage_name: The key of this data in the hdf5 file
+        :param lazy_loaded: Whether the object is lazy loaded or set outright
+        """
+        self.__my_backend: Optional[h5py.File] = backend
+        self.__my_name: str = storage_name
+        self.__am_i_lazy: bool = lazy_loaded
+        self.__my_data: Optional[List[np.ndarray]] = None
+        self.__am_i_modified: bool = False
+
+    def get_data(self, n_planes) -> List[np.ndarray]:
+        if self.__am_i_lazy and self.__my_backend is None:
+            raise ExperimentException("Object is for lazy load but no backend specified")
+        if self.__am_i_lazy:
+            assert self.__my_data is None
+            self.__my_data = []
+            for i in range(n_planes):
+                plane_group = self.__my_backend[str(i)]
+                if self.__my_name in plane_group:  # test if this experiment had the requested data
+                    self.__my_data.append(plane_group[self.__my_name][()])
+            self.__am_i_lazy = False
+        return self.__my_data
+
+    def set_data(self, value: List[np.ndarray]) -> None:
+        self.__am_i_lazy = False
+        self.__am_i_modified = True
+        self.__my_data = value
+
+    def update(self) -> None:
+        if self.am_i_modified and len(self.__my_data) > 0:
+            for i in range(len(self.__my_data)):
+                plane_group = self.__my_backend[str(i)]
+                if self.__my_name in plane_group:
+                    del plane_group[self.__my_name]
+                plane_group.create_dataset(self.__my_name, data=self.__my_data[i], compression="gzip",
+                                           compression_opts=5)
+            self.__am_i_modified = False
+
+    @property
+    def am_i_lazy(self):
+        return self.__am_i_lazy
+
+    @property
+    def am_i_modified(self):
+        return self.__am_i_modified
+
+
 class Experiment2P:
     """
     Represents a 2-photon imaging experiment on which cells have been segmented
     """
-    def __init__(self, lazy_load_filename: str = ""):
+    def __init__(self, lazy_load_filename: str = "", allow_write=True):
         """
         Creates a new Experiment2P object
         :param lazy_load_filename: If given, will attach this instance to an existing hdf5 store at the filename
+        :param allow_write: If lazy load filename is given and set to true, allow changing of store
         """
         self.info_data: Dict[str, Any] = {}  # data from the experiment's info data
         self.experiment_name: str = ""  # name of the experiment
@@ -38,13 +92,26 @@ class Experiment2P:
         self.scope_name: str = ""  # the name assigned to the microscope for informational purposes
         self.comment: str = ""  # general comment associated with the experiment
         self.tail_frame_rate: int = 0  # the frame-rate of the tail camera
+        self.tail_data_augmented: bool = False
         self.scanner_data: List[Dict] = []  # for each experimental plane the associated scanner data (resolution, etc.)
-        self.__tail_data: List[np.ndarray] = []  # for each experimental plane the tail data if applicable
-        self.__laser_data: List[np.ndarray] = []  # per plane 20Hz vector of laser command voltages if applicable
         self.bout_data: List[np.ndarray] = []  # for each experimental plane, matrix of extracted swim bouts
         self.tail_frame_times: List[np.ndarray] = []  # for each plane, the scan relative time of each tail cam frame
-        self.__all_c: List[np.ndarray] = []  # for each experimental plane the inferred calcium of each extracted unit
-        self.__all_dff: List[np.ndarray] = []  # for each experimental plane the dF/F of each extracted unit
+
+        # the following are optionally lazy-loaded data objects #
+        # for each experimental plane the tail data if applicable
+        self.__tail_data: LazyLoadObject = LazyLoadObject(None, "tail_data", False)
+        # if tail data is augmented for each plane replaced frames
+        self.__replaced_tail_frames: LazyLoadObject = LazyLoadObject(None, "replaced_tail_frames", False)
+        # per plane 20Hz vector of laser command voltages if applicable
+        self.__laser_data: LazyLoadObject = LazyLoadObject(None, "laser_data", False)
+        # for each experimental plane the inferred calcium of each extracted unit
+        self.__all_c: LazyLoadObject = LazyLoadObject(None, "C", False)
+        # for each experimental plane the dF/F of each extracted unit
+        self.__all_dff: LazyLoadObject = LazyLoadObject(None, "dff", False)
+        # for each plane the realigned 8-bit functional stack
+        self.__func_stacks: LazyLoadObject = LazyLoadObject(None, "func_stack", False)
+        # end optionally lazy-loaded data objects #
+
         # for each experimental plane the unit centroid coordinates as (x [col]/y [row]) pairs
         self.all_centroids: List[np.ndarray] = []
         # for each experimental plane the size of each unit in pixels (not weighted)
@@ -55,18 +122,17 @@ class Experiment2P:
         self.projections: List[np.ndarray] = []
         # for dual-channel experiments, list of 32 bit plane projections of anatomy channel
         self.anat_projections: List[np.ndarray] = []
-        self.__func_stacks: List[np.ndarray] = []  # for each plane the realigned 8-bit functional stack
         self.mcorr_dicts: List[Dict] = []  # the motion correction parameters used on each plane
         self.cnmf_extract_dicts: List[Dict] = []  # the cnmf source extraction parameters used on each plane
         self.cnmf_val_dicts: List[Dict] = []  # the cnmf validation parameters used on each plane
-        self.version: str = "1"  # version ID for future-proofing
+        self.version: str = "2"  # version ID for future-proofing
         self.populated: bool = False  # indicates if class contains experimental data through analysis or loading
         self.lazy: bool = False  # indicates that we have lazy-loaded and attached to hdf5 file
         self.__hdf5_store: Optional[h5py.File] = None
         if lazy_load_filename != "" and not path.exists(lazy_load_filename):
             raise ValueError(f"The file {lazy_load_filename} does not exist. Cannot attach to store.")
         if lazy_load_filename != "":
-            self.__lazy_load(lazy_load_filename)
+            self.__lazy_load(lazy_load_filename, allow_write)
 
     def __enter__(self):
         return self
@@ -77,21 +143,23 @@ class Experiment2P:
             self.__hdf5_store = None
             self.lazy = False
 
-    def __lazy_load(self, lazy_load_filename: str) -> None:
+    def __lazy_load(self, lazy_load_filename: str, allow_write: bool) -> None:
         """
         Performs "lazy loading" loading some properties and making others available through an hdf5 store backend
         :param lazy_load_filename: The name of the experiment hdf5 file
+        :param allow_write: If set to true, file will be opened in append mode
         """
-        self.__hdf5_store = h5py.File(lazy_load_filename, 'r')
+        self.__hdf5_store = h5py.File(lazy_load_filename, 'r+' if allow_write else 'r')
         self.version = self.__hdf5_store["version"][()]
         try:
             if self.version == b"unstable" or self.version == "unstable":
                 warnings.warn("Experiment file was created with development version of analysis code. Trying to "
                               "load as version 1")
-            elif int(self.version) > 1:
+                self.version = "0"
+            elif int(self.version) > 2:
                 self.__hdf5_store.close()
                 self.__hdf5_store = None
-                raise IOError(f"File version {self.version} is larger than highest recognized version '1'")
+                raise IOError(f"File version {self.version} is larger than highest recognized version '2'")
         except ValueError:
             self.__hdf5_store.close()
             self.__hdf5_store = None
@@ -105,6 +173,9 @@ class Experiment2P:
         self.tail_frame_rate = self.__hdf5_store["tail_frame_rate"][()]
         # load singular parameter dictionary
         self.info_data = self._load_dictionary("info_data", self.__hdf5_store)
+        # load tail-data modification flag if this is version 2
+        if int(self.version) > 1:
+            self.tail_data_augmented = self.__hdf5_store["tail_data_augmented"][()]
         # load some per-plane data leave larger objects unloaded
         for i in range(n_planes):
             plane_group = self.__hdf5_store[str(i)]
@@ -124,95 +195,62 @@ class Experiment2P:
             self.cnmf_extract_dicts.append(json.loads(ps))
             ps = plane_group["cnmf_val_dict"][()]
             self.cnmf_val_dicts.append(json.loads(ps))
+        # update lazy load stores for non-loaded objects
+        self.__tail_data = LazyLoadObject(self.__hdf5_store, "tail_data")
+        self.__replaced_tail_frames = LazyLoadObject(self.__hdf5_store, "replaced_tail_frames")
+        self.__laser_data = LazyLoadObject(self.__hdf5_store, "laser_data")
+        self.__all_c = LazyLoadObject(self.__hdf5_store, "C")
+        self.__all_dff = LazyLoadObject(self.__hdf5_store, "dff")
+        self.__func_stacks = LazyLoadObject(self.__hdf5_store, "func_stack")
         self.lazy = True
 
     @property
     def tail_data(self) -> List[np.ndarray]:
-        if not self.lazy:
-            return self.__tail_data
-        else:
-            if self.__hdf5_store is None:
-                raise ExperimentException("Hdf5 store not properly attached")
-            rval = []
-            for i in range(self.n_planes):
-                plane_group = self.__hdf5_store[str(i)]
-                if "tail_data" in plane_group:  # test if this experiment had tail data (for all planes)
-                    rval.append(plane_group["tail_data"][()])
-            return rval
+        return self.__tail_data.get_data(self.n_planes)
 
     @tail_data.setter
     def tail_data(self, value: List[np.ndarray]):
-        self.__tail_data = value
+        self.__tail_data.set_data(value)
+
+    @property
+    def replaced_tail_frames(self) -> List[np.ndarray]:
+        return self.__replaced_tail_frames.get_data(self.n_planes)
+
+    @replaced_tail_frames.setter
+    def replaced_tail_frames(self, value: List[np.ndarray]):
+        self.__replaced_tail_frames.set_data(value)
 
     @property
     def laser_data(self) -> List[np.ndarray]:
-        if not self.lazy:
-            return self.__laser_data
-        else:
-            if self.__hdf5_store is None:
-                raise ExperimentException("Hdf5 store not properly attached")
-            rval = []
-            for i in range(self.n_planes):
-                plane_group = self.__hdf5_store[str(i)]
-                if "laser_data" in plane_group:  # test if this experiment had laser data
-                    rval.append(plane_group["laser_data"][()])
-            return rval
+        return self.__laser_data.get_data(self.n_planes)
 
     @laser_data.setter
-    def laser_data(self, value: np.ndarray):
-        self.__laser_data = value
+    def laser_data(self, value: List[np.ndarray]):
+        self.__laser_data.set_data(value)
 
     @property
     def all_c(self) -> List[np.ndarray]:
-        if not self.lazy:
-            return self.__all_c
-        else:
-            if self.__hdf5_store is None:
-                raise ExperimentException("Hdf5 store not properly attached")
-            rval = []
-            for i in range(self.n_planes):
-                plane_group = self.__hdf5_store[str(i)]
-                rval.append(plane_group["C"][()])
-            return rval
+        return self.__all_c.get_data(self.n_planes)
 
     @all_c.setter
     def all_c(self, value: List[np.ndarray]):
-        self.__all_c = value
+        self.__all_c.set_data(value)
 
     @property
     def all_dff(self) -> List[np.ndarray]:
-        if not self.lazy:
-            return self.__all_dff
-        else:
-            if self.__hdf5_store is None:
-                raise ExperimentException("Hdf5 store not properly attached")
-            rval = []
-            for i in range(self.n_planes):
-                plane_group = self.__hdf5_store[str(i)]
-                rval.append(plane_group["dff"][()])
-            return rval
+        return self.__all_dff.get_data(self.n_planes)
 
     @all_dff.setter
     def all_dff(self, value: List[np.ndarray]):
-        self.all_dff = value
+        self.__all_dff.set_data(value)
 
     @property
     def func_stacks(self) -> List[np.ndarray]:
-        if not self.lazy:
-            return self.__func_stacks
-        else:
-            if self.__hdf5_store is None:
-                raise ExperimentException("Hdf5 store not properly attached")
-            rval = []
-            for i in range(self.n_planes):
-                plane_group = self.__hdf5_store[str(i)]
-                if "func_stack" in plane_group:
-                    rval.append(plane_group["func_stack"][()])
-            return rval
+        return self.__func_stacks.get_data(self.n_planes)
 
     @func_stacks.setter
     def func_stacks(self, value: List[np.ndarray]):
-        self.func_stacks = value
+        self.__func_stacks.set_data(value)
 
     @staticmethod
     def load_experiment(file_name: str):
@@ -222,14 +260,21 @@ class Experiment2P:
         :return: Experiment object with all relevant data
         """
         exp = Experiment2P()
+        # initialize the lazy-load objects with empty lists
+        exp.tail_data = []
+        exp.replaced_tail_frames = []
+        exp.laser_data = []
+        exp.all_c = []
+        exp.all_dff = []
+        exp.func_stacks = []
         with h5py.File(file_name, 'r') as dfile:
             exp.version = dfile["version"][()]  # in future allows for version specific loading
             try:
                 if exp.version == b"unstable" or exp.version == "unstable":
                     warnings.warn("Experiment file was created with development version of analysis code. Trying to "
                                   "load as version 1")
-                elif int(exp.version) > 1:
-                    raise IOError(f"File version {exp.version} is larger than highest recognized version '1'")
+                elif int(exp.version) > 2:
+                    raise IOError(f"File version {exp.version} is larger than highest recognized version '2'")
             except ValueError:
                 raise IOError(f"File version {exp.version} not recognized")
             # load general experiment data
@@ -241,6 +286,9 @@ class Experiment2P:
             exp.tail_frame_rate = dfile["tail_frame_rate"][()]
             # load singular parameter dictionary
             exp.info_data = exp._load_dictionary("info_data", dfile)
+            # load tail-data modification flag if this is version 2
+            if int(exp.version) > 1:
+                exp.tail_data_augmented = dfile["tail_data_augmented"][()]
             # load per-plane data
             for i in range(n_planes):
                 plane_group = dfile[str(i)]
@@ -255,6 +303,8 @@ class Experiment2P:
                     exp.tail_data.append(plane_group["tail_data"][()])
                     exp.bout_data.append(plane_group["bout_data"][()])
                     exp.tail_frame_times.append(plane_group["tail_frame_time"][()])
+                if int(exp.version) > 1 and "replaced_tail_frames" in plane_group:
+                    exp.replaced_tail_frames.append(plane_group["replaced_tail_frames"][()])
                 if "laser_data" in plane_group:  # test if this experiment had laser data
                     exp.laser_data.append(plane_group["laser_data"][()])
                 exp.all_c.append(plane_group["C"][()])
@@ -311,6 +361,59 @@ class Experiment2P:
                 d[k] = g[k][()]
         return d
 
+    @staticmethod
+    def _update_data(storage: Union[h5py.File, h5py.Group], name: str, data: Any, compress: bool = False) -> None:
+        """
+        Updates data in an hdf5 file or group deleting old data if necessary
+        :param storage: The hdf5 file or group that should store the new data
+        :param name: The key name of the new data
+        :param data: The data
+        :param compress: If true, data will be stored compressed
+        """
+        if name in storage:
+            del storage[name]
+        if compress:
+            storage.create_dataset(name, data=data, compression="gzip", compression_opts=5)
+        else:
+            storage.create_dataset(name, data=data)
+
+    def update_experiment_store(self) -> None:
+        if not self.lazy:
+            raise ExperimentException("Only lazy-loaded experiments can be updated. Use save_experiment otherwise")
+        # data that isn't lazy-loaded is usually small and will be updated by default. Lazy-loaded objects will only
+        # be written to disk if they 1) were loaded and 2) were modified
+        # no dictionaries will be modified, similarly basic experiment info data will not be updated
+        self.version = "2"
+        self._update_data(self.__hdf5_store, "version", self.version)
+        self._update_data(self.__hdf5_store, "n_planes", data=self.n_planes)
+        self._update_data(self.__hdf5_store, "tail_frame_rate", data=self.tail_frame_rate)
+        # update all lazy-loaded data if indicated
+        self.__tail_data.update()
+        if int(self.version) > 1:
+            self._update_data(self.__hdf5_store, "tail_data_augmented", data=self.tail_data_augmented)
+            self.__replaced_tail_frames.update()
+        self.__laser_data.update()
+        self.__all_c.update()
+        self.__all_dff.update()
+        self.__func_stacks.update()
+        # save per-plane non-lazy data
+        for i in range(self.n_planes):
+            plane_group = self.__hdf5_store[str(i)]
+            if len(self.tail_data) > 0:
+                if self.bout_data[i] is not None:
+                    self._update_data(plane_group, "bout_data", self.bout_data[i], True)
+                else:
+                    # no bouts were found, save dummy array of one line of np.nan
+                    bd = np.full((1, 8), np.nan)
+                    self._update_data(plane_group, "bout_data", bd, True)
+                self._update_data(plane_group, "tail_frame_time", self.tail_frame_times[i], True)
+            self._update_data(plane_group, "projection", self.projections[i], True)
+            if len(self.anat_projections) > 0:  # this is a dual-channel experiment
+                self._update_data(plane_group, "anat_projection", self.anat_projections[i], True)
+            self._update_data(plane_group, "centroids", self.all_centroids[i], True)
+            self._update_data(plane_group, "sizes", self.all_sizes[i], True)
+            self._update_data(plane_group, "spatial", self.all_spatial[i], True)
+
     def save_experiment(self, file_name: str, ovr_if_exists=False) -> None:
         """
         Saves the experiment to the indicated file in hdf5 format
@@ -318,7 +421,7 @@ class Experiment2P:
         :param ovr_if_exists: If set to true and file exists it will be overwritten otherwise exception will be raised
         """
         if not self.populated:
-            raise ValueError("Empty experiment class cannot be saved. Load or analyze experiment first.")
+            raise ExperimentException("Empty experiment class cannot be saved. Load or analyze experiment first.")
         if ovr_if_exists:
             dfile = h5py.File(file_name, "w")
         else:
@@ -334,6 +437,9 @@ class Experiment2P:
             dfile.create_dataset("tail_frame_rate", data=self.tail_frame_rate)
             # save singular parameter dictionary
             self._save_dictionary(self.info_data, "info_data", dfile)
+            # save augmentation flag
+            if int(self.version) > 1:
+                dfile.create_dataset("tail_data_augmented", data=self.tail_data_augmented)
             # save per-plane data
             for i in range(self.n_planes):
                 plane_group = dfile.create_group(str(i))
@@ -349,14 +455,18 @@ class Experiment2P:
                         bd = np.full((1, 8), np.nan)
                         plane_group.create_dataset("bout_data", data=bd, compression="gzip", compression_opts=5)
                     plane_group.create_dataset("tail_frame_time", data=self.tail_frame_times[i])
-                if len(self.laser_data) > 0:
+                if (int(self.version) > 1 and self.replaced_tail_frames is not None
+                        and len(self.replaced_tail_frames) > 0):
+                    plane_group.create_dataset("replaced_tail_frames", data=self.replaced_tail_frames[i],
+                                               compression="gzip", compression_opts=5)
+                if self.laser_data is not None and len(self.laser_data) > 0:
                     plane_group.create_dataset("laser_data", data=self.laser_data[i], compression="gzip",
                                                compression_opts=5)
                 plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
                                            compression_opts=5)
                 plane_group.create_dataset("func_stack", data=self.func_stacks[i], compression="gzip",
                                            compression_opts=5)
-                if len(self.anat_projections) > 0:  # this is a dual-channel experiment
+                if self.anat_projections is not None and len(self.anat_projections) > 0:  # dual-channel experiment
                     plane_group.create_dataset("anat_projection", data=self.anat_projections[i], compression="gzip",
                                                compression_opts=5)
                 plane_group.create_dataset("C", data=self.all_c[i], compression="gzip", compression_opts=5)

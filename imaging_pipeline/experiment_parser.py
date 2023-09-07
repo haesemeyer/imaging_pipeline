@@ -203,13 +203,15 @@ class ExperimentParser:
         :param name: The name of the file
         :return: Imaging plane
         """
-        plane_start = name.find("_Z_") + 3
-        plane_end = name[plane_start:].find("_")
+        f_name = path.splitext(name)[0]
+        plane_start = f_name.find("_Z_") + 3
+        plane_end = f_name[plane_start:].find("_")
         if plane_end == -1:
-            # tail file or laser file
-            plane_end = name[plane_start:].find(".tail")
-            if plane_end == -1:
-                plane_end = name[plane_start:].find(".laser")
-        if plane_end == -1:
-            raise ValueError("Can't find plane identification in file name")
-        return int(name[plane_start:plane_start + plane_end])
+            plane_end = len(f_name)
+        try:
+            plane_number = int(f_name[plane_start:plane_start + plane_end])
+        except ValueError:
+            print(f"Could not convert plane identification for {name}")
+            raise
+        print(plane_number)
+        return plane_number

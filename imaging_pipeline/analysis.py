@@ -97,15 +97,25 @@ def analyze_experiment(info_file_name: str, scope_name: str, comment: str, cai_p
         print(e)
         exp.tail_data = []
         exp.bout_data = []
-    # collect data in laser files if applicable
+    # collect data in laser files and temperature  files if applicable
     try:
+        ldata = []
+        ftdata = []
+        ctdata = []
         if eparser.has_laser_data:
-            ldata = []
             for lf in eparser.laser_files:
                 ldata.append(np.genfromtxt(path.join(exp.original_path, lf)))
             exp.laser_data = ldata
+        if eparser.has_fish_temp:
+            for ftf in eparser.fish_temp_files:
+                ftdata.append(np.genfromtxt(path.join(exp.original_path, ftf)))
+            exp.fish_temp_data = ftdata
+        if eparser.has_control_temp:
+            for ctf in eparser.control_temp_files:
+                ctdata.append(np.genfromtxt(path.join(exp.original_path, ctf)))
+            exp.control_temp_data = ctdata
     except (IOError, OSError) as e:
-        print(f".laser files are present but at least one file failed to load. Not attaching any laser data.")
+        print(f".laser and/or .temp files are present but at least one file failed to load. Not the data.")
         print(e)
     # use caiman to extract units and calcium data
     if eparser.is_dual_channel:

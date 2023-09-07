@@ -75,6 +75,19 @@ class LazyLoadObject:
     def am_i_modified(self):
         return self.__am_i_modified
 
+    @property
+    def has_data(self) -> bool:
+        if self.__am_i_lazy and self.__my_backend is None:
+            raise ExperimentException("Object is for lazy load but no backend specified")
+        if self.__am_i_lazy:
+            plane_group = self.__my_backend["0"]
+            if self.__my_name in plane_group:
+                return True
+            else:
+                return False
+        else:
+            return len(self.__my_data) > 0
+
 
 class Experiment2P:
     """
@@ -104,6 +117,10 @@ class Experiment2P:
         self.__replaced_tail_frames: LazyLoadObject = LazyLoadObject(None, "replaced_tail_frames", False)
         # per plane 20Hz vector of laser command voltages if applicable
         self.__laser_data: LazyLoadObject = LazyLoadObject(None, "laser_data", False)
+        # per plane 20Hz vector of fish temperatures if applicable
+        self.__fish_temp_data = LazyLoadObject(None, "fish_temp_data", False)
+        # per plane 20Hz vector of control temperatures if applicable
+        self.__control_temp_data = LazyLoadObject(None, "control_temp_data", False)
         # for each experimental plane the inferred calcium of each extracted unit
         self.__all_c: LazyLoadObject = LazyLoadObject(None, "C", False)
         # for each experimental plane the dF/F of each extracted unit
@@ -125,7 +142,7 @@ class Experiment2P:
         self.mcorr_dicts: List[Dict] = []  # the motion correction parameters used on each plane
         self.cnmf_extract_dicts: List[Dict] = []  # the cnmf source extraction parameters used on each plane
         self.cnmf_val_dicts: List[Dict] = []  # the cnmf validation parameters used on each plane
-        self.version: str = "2"  # version ID for future-proofing
+        self.version: str = "3"  # version ID for future-proofing
         self.populated: bool = False  # indicates if class contains experimental data through analysis or loading
         self.lazy: bool = False  # indicates that we have lazy-loaded and attached to hdf5 file
         self.__hdf5_store: Optional[h5py.File] = None
@@ -156,10 +173,10 @@ class Experiment2P:
                 warnings.warn("Experiment file was created with development version of analysis code. Trying to "
                               "load as version 1")
                 self.version = "0"
-            elif int(self.version) > 2:
+            elif int(self.version) > 3:
                 self.__hdf5_store.close()
                 self.__hdf5_store = None
-                raise IOError(f"File version {self.version} is larger than highest recognized version '2'")
+                raise IOError(f"File version {self.version} is larger than highest recognized version '3'")
         except ValueError:
             self.__hdf5_store.close()
             self.__hdf5_store = None
@@ -199,6 +216,9 @@ class Experiment2P:
         self.__tail_data = LazyLoadObject(self.__hdf5_store, "tail_data")
         self.__replaced_tail_frames = LazyLoadObject(self.__hdf5_store, "replaced_tail_frames")
         self.__laser_data = LazyLoadObject(self.__hdf5_store, "laser_data")
+        if int(self.version) > 2:
+            self.__fish_temp_data = LazyLoadObject(self.__hdf5_store, "fish_temp_data")
+            self.__control_temp_data = LazyLoadObject(self.__hdf5_store, "control_temp_data")
         self.__all_c = LazyLoadObject(self.__hdf5_store, "C")
         self.__all_dff = LazyLoadObject(self.__hdf5_store, "dff")
         self.__func_stacks = LazyLoadObject(self.__hdf5_store, "func_stack")
@@ -227,6 +247,22 @@ class Experiment2P:
     @laser_data.setter
     def laser_data(self, value: List[np.ndarray]):
         self.__laser_data.set_data(value)
+
+    @property
+    def fish_temp_data(self) -> List[np.ndarray]:
+        return self.__fish_temp_data.get_data(self.n_planes)
+
+    @fish_temp_data.setter
+    def fish_temp_data(self, value: List[np.ndarray]):
+        self.__fish_temp_data.set_data(value)
+
+    @property
+    def control_temp_data(self) -> List[np.ndarray]:
+        return self.__control_temp_data.get_data(self.n_planes)
+
+    @control_temp_data.setter
+    def control_temp_data(self, value: List[np.ndarray]):
+        self.__control_temp_data.set_data(value)
 
     @property
     def all_c(self) -> List[np.ndarray]:
@@ -264,6 +300,8 @@ class Experiment2P:
         exp.tail_data = []
         exp.replaced_tail_frames = []
         exp.laser_data = []
+        exp.control_temp_data = []
+        exp.fish_temp_data = []
         exp.all_c = []
         exp.all_dff = []
         exp.func_stacks = []
@@ -307,6 +345,11 @@ class Experiment2P:
                     exp.replaced_tail_frames.append(plane_group["replaced_tail_frames"][()])
                 if "laser_data" in plane_group:  # test if this experiment had laser data
                     exp.laser_data.append(plane_group["laser_data"][()])
+                if int(exp.version) > 2:
+                    if "fish_temp_data" in plane_group:
+                        exp.fish_temp_data.append(plane_group["fish_temp_data"][()])
+                    if "control_temp_data" in plane_group:
+                        exp.control_temp_data.append(plane_group["control_temp_data"][()])
                 exp.all_c.append(plane_group["C"][()])
                 exp.all_dff.append(plane_group["dff"][()])
                 exp.all_centroids.append(plane_group["centroids"][()])
@@ -383,7 +426,7 @@ class Experiment2P:
         # data that isn't lazy-loaded is usually small and will be updated by default. Lazy-loaded objects will only
         # be written to disk if they 1) were loaded and 2) were modified
         # no dictionaries will be modified, similarly basic experiment info data will not be updated
-        self.version = "2"
+        self.version = "3"
         self._update_data(self.__hdf5_store, "version", self.version)
         self._update_data(self.__hdf5_store, "n_planes", data=self.n_planes)
         self._update_data(self.__hdf5_store, "tail_frame_rate", data=self.tail_frame_rate)
@@ -393,6 +436,8 @@ class Experiment2P:
             self._update_data(self.__hdf5_store, "tail_data_augmented", data=self.tail_data_augmented)
             self.__replaced_tail_frames.update()
         self.__laser_data.update()
+        self.__fish_temp_data.update()
+        self.__control_temp_data.update()
         self.__all_c.update()
         self.__all_dff.update()
         self.__func_stacks.update()
@@ -461,6 +506,12 @@ class Experiment2P:
                                                compression="gzip", compression_opts=5)
                 if self.laser_data is not None and len(self.laser_data) > 0:
                     plane_group.create_dataset("laser_data", data=self.laser_data[i], compression="gzip",
+                                               compression_opts=5)
+                if self.fish_temp_data is not None and len(self.fish_temp_data) > 0:
+                    plane_group.create_dataset("fish_temp_data", data=self.fish_temp_data[i], compression="gzip",
+                                               compression_opts=5)
+                if self.control_temp_data is not None and len(self.control_temp_data) > 0:
+                    plane_group.create_dataset("control_temp_data", data=self.control_temp_data[i], compression="gzip",
                                                compression_opts=5)
                 plane_group.create_dataset("projection", data=self.projections[i], compression="gzip",
                                            compression_opts=5)

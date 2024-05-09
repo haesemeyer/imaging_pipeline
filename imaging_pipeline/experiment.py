@@ -311,7 +311,7 @@ class Experiment2P:
                 if exp.version == b"unstable" or exp.version == "unstable":
                     warnings.warn("Experiment file was created with development version of analysis code. Trying to "
                                   "load as version 1")
-                elif int(exp.version) > 2:
+                elif int(exp.version) > 3:
                     raise IOError(f"File version {exp.version} is larger than highest recognized version '2'")
             except ValueError:
                 raise IOError(f"File version {exp.version} not recognized")
